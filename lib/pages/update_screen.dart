@@ -23,7 +23,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
       OtaUpdate()
           .execute(
             downloadUrl,
-            destinationFilename:"emby_tv.apk",
+            destinationFilename:downloadUrl.split('/').last,
           )
           .listen((OtaEvent event) {
             if (!mounted) return;
