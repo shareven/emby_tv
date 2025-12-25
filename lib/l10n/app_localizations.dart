@@ -64,7 +64,7 @@ class AppLocalizations {
       'fps_suffix': 'fps',
       'playback_correction': 'Playback correction',
       'playback_correction_off': 'Off',
-      'playback_correction_server': 'Server transcode',
+      'playback_correction_server': 'Server transcode to H.264',
       'footer_notice':
           'This is a free open-source Emby client for learning and technical exchange; commercial use is prohibited.\nRepository: https://github.com/shareven/emby_tv',
       'transcode_reason_video_codec': 'Video codec not supported',
@@ -129,7 +129,7 @@ class AppLocalizations {
       'fps_suffix': 'fps',
       'playback_correction': '播放校正',
       'playback_correction_off': '关闭',
-      'playback_correction_server': '服务器转码',
+      'playback_correction_server': '服务器转码为H.264',
       'footer_notice':
           '这是一个用于学习和技术交流的开源免费 Emby 客户端，禁止商业用途。\n开源地址：https://github.com/shareven/emby_tv',
       'transcode_reason_video_codec': '视频编码不被支持',
