@@ -51,6 +51,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final model = context.watch<AppModel>();
+    String versionUpdateNote = '';
+    if (model.needUpdate) {
+      versionUpdateNote = AppLocalizations.of(
+        context,
+      )!.newVersionAvailable(model.newVersion);
+    }
     return Scaffold(
       body: BuildGradientBackground(
         child: Center(
@@ -77,7 +84,20 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 40),
                 _buildLoginButton(),
-                const SizedBox(height: 28),
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: Text(
+                    versionUpdateNote.isNotEmpty
+                        ? "${AppLocalizations.of(context)!.pressMenuToShowMenu}  ${model.currentVersion}  $versionUpdateNote"
+                        : "",
+                    style: const TextStyle(
+                      color: Colors.pink,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24.0),
                   child: Column(
@@ -158,6 +178,7 @@ class _LoginScreenState extends State<LoginScreen> {
     autofocus = false,
   }) {
     Color primaryColor = Theme.of(context).colorScheme.primary;
+    bool needUpdate = context.watch<AppModel>().needUpdate;
     return Focus(
       autofocus: autofocus,
       onKeyEvent: (node, event) {
@@ -174,8 +195,8 @@ class _LoginScreenState extends State<LoginScreen> {
             );
             return KeyEventResult.handled;
           }
-          if (key == LogicalKeyboardKey.contextMenu &&
-              context.watch<AppModel>().needUpdate) {
+
+          if (key == LogicalKeyboardKey.contextMenu && needUpdate) {
             _showMenuDialog();
             return KeyEventResult.handled;
           }
@@ -372,38 +393,37 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
 
-              if (context.watch<AppModel>().needUpdate)
-                Focus(
-                  autofocus: true,
-                  onKeyEvent: (node, event) {
-                    if (event is KeyDownEvent) {
-                      final key = event.logicalKey;
-                      if (key == LogicalKeyboardKey.accept ||
-                          key == LogicalKeyboardKey.select ||
-                          key == LogicalKeyboardKey.enter) {
-                        Navigator.pop(context);
-                        _goUpdate();
-                        return KeyEventResult.handled;
-                      }
+              Focus(
+                autofocus: true,
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent) {
+                    final key = event.logicalKey;
+                    if (key == LogicalKeyboardKey.accept ||
+                        key == LogicalKeyboardKey.select ||
+                        key == LogicalKeyboardKey.enter) {
+                      Navigator.pop(context);
+                      _goUpdate();
+                      return KeyEventResult.handled;
                     }
-                    return KeyEventResult.ignored;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: Builder(
+                  builder: (context) {
+                    FocusNode node = Focus.of(context);
+                    bool isFocused = node.hasFocus;
+                    return ListTile(
+                      title: Text(
+                        AppLocalizations.of(context)!.downloadLatestVersion,
+                        style: TextStyle(color: Colors.white, fontSize: 24),
+                      ),
+                      tileColor: isFocused
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                    );
                   },
-                  child: Builder(
-                    builder: (context) {
-                      FocusNode node = Focus.of(context);
-                      bool isFocused = node.hasFocus;
-                      return ListTile(
-                        title: Text(
-                          AppLocalizations.of(context)!.downloadLatestVersion,
-                          style: TextStyle(color: Colors.white, fontSize: 24),
-                        ),
-                        tileColor: isFocused
-                            ? Theme.of(context).colorScheme.primary
-                            : null,
-                      );
-                    },
-                  ),
                 ),
+              ),
             ],
           ),
         ),

@@ -55,6 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (isMyLibrary) {
       width = 230;
     }
+    bool needUpdate = context.read<AppModel>().needUpdate;
     return Column(
       key: Key(sectionIndex.toString()),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -93,6 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       itemIndex: index,
                       isContinueWatching: isContinueWatching,
                       isMyLibrary: isMyLibrary,
+                      needUpdate: needUpdate,
                     );
                   },
                 ),
@@ -109,7 +111,9 @@ class _HomeScreenState extends State<HomeScreen> {
     required int itemIndex,
     required bool isContinueWatching,
     required bool isMyLibrary,
+    required bool needUpdate,
   }) {
+    
     return Padding(
       key: Key(itemIndex.toString()),
       padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -126,7 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
             }
             if (key == LogicalKeyboardKey.contextMenu ||
                 key == LogicalKeyboardKey.browserFavorites) {
-              _showMenuDialog();
+              _showMenuDialog(needUpdate);
             }
           }
           return KeyEventResult.ignored;
@@ -154,7 +158,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showMenuDialog() async {
+  void _showMenuDialog(bool needUpdate) async {
+    
     await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -225,7 +230,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
               ),
-              if (context.watch<AppModel>().needUpdate)
+              if (needUpdate)
                 Focus(
                   autofocus: true,
                   onKeyEvent: (node, event) {
