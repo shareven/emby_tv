@@ -259,6 +259,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildLoginButton() {
     Color primaryColor = Theme.of(context).colorScheme.primary;
+    bool needUpdate = context.watch<AppModel>().needUpdate;
     return Focus(
       autofocus: false,
       onKeyEvent: (node, event) {
@@ -270,8 +271,7 @@ class _LoginScreenState extends State<LoginScreen> {
             _handleLogin();
             return KeyEventResult.handled;
           }
-          if (key == LogicalKeyboardKey.contextMenu &&
-              context.watch<AppModel>().needUpdate) {
+          if (key == LogicalKeyboardKey.contextMenu && needUpdate) {
             _showMenuDialog();
             return KeyEventResult.handled;
           }
