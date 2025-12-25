@@ -6,7 +6,10 @@
 
 ## 简介 / Introduction
 
+这是一个用于学习和技术交流的开源 Emby 客户端（TV/盒子向界面）。
+项目主要用于学习 Flutter 在 TV/遥控交互、焦点管理、流式播放集成（Emby API）以及多语言本地化等方面的实践。
 
+This is an open-source Emby client aimed at learning and exchanging technical knowledge. The project demonstrates Flutter usage for TV/remote UI, focus handling, streaming integration with Emby API, and localization.
 
 ## 下载 / Download
 
