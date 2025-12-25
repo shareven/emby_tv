@@ -67,6 +67,15 @@ class AppLocalizations {
       'playback_correction_server': 'Server transcode',
       'footer_notice':
           'This is a free open-source Emby client for learning and technical exchange; commercial use is prohibited.\nRepository: https://github.com/shareven/emby_tv',
+      'transcode_reason_video_codec': 'Video codec not supported',
+      'transcode_reason_audio_codec': 'Audio codec not supported',
+      'transcode_reason_container': 'Container not supported',
+      'transcode_reason_bitrate': 'Bitrate too high',
+      'transcode_reason_resolution': 'Resolution too high',
+      'transcode_reason_framerate': 'Framerate not supported',
+      'transcode_reason_subtitle': 'Subtitle not supported',
+      'transcode_reason_direct_play_blocked': 'Direct play not allowed',
+      'transcode_reason_unknown': 'Transcode reason',
     },
     'zh': {
       'newVersionAvailable': ' （新版本可用: {version}）',
@@ -101,7 +110,7 @@ class AppLocalizations {
       'season': '季',
       'unknown': '未知',
       'failed_get_playback_info': '获取播放信息失败',
-      'streaming': '流式',
+      'streaming': '流媒体',
       'video': '视频',
       'audio_label': '音频',
       'episodes': '选集',
@@ -123,6 +132,15 @@ class AppLocalizations {
       'playback_correction_server': '服务器转码',
       'footer_notice':
           '这是一个用于学习和技术交流的开源免费 Emby 客户端，禁止商业用途。\n开源地址：https://github.com/shareven/emby_tv',
+      'transcode_reason_video_codec': '视频编码不被支持',
+      'transcode_reason_audio_codec': '音频编码不被支持',
+      'transcode_reason_container': '容器格式不被支持',
+      'transcode_reason_bitrate': '码率过高',
+      'transcode_reason_resolution': '分辨率过高',
+      'transcode_reason_framerate': '帧率不被支持',
+      'transcode_reason_subtitle': '字幕不被支持',
+      'transcode_reason_direct_play_blocked': '不允许直接播放',
+      'transcode_reason_unknown': '转码原因',
     },
   };
 
@@ -176,6 +194,34 @@ class AppLocalizations {
   String get audio => _get('audio');
   String get disableSubtitles => _get('disable_subtitles');
   String get noEpisodesFound => _get('no_episodes_found');
+  String get transcodeReasonUnknown => _get('transcode_reason_unknown');
+
+  String transcodeReason(String reason) {
+    switch (reason) {
+      case 'VideoCodecNotSupported':
+      case 'VideoCodecNotSupportedByDevice':
+        return _get('transcode_reason_video_codec');
+      case 'AudioCodecNotSupported':
+      case 'AudioCodecNotSupportedByDevice':
+        return _get('transcode_reason_audio_codec');
+      case 'ContainerNotSupported':
+        return _get('transcode_reason_container');
+      case 'BitrateTooHigh':
+        return _get('transcode_reason_bitrate');
+      case 'ResolutionTooHigh':
+        return _get('transcode_reason_resolution');
+      case 'FramerateNotSupported':
+        return _get('transcode_reason_framerate');
+      case 'SubtitleNotSupported':
+        return _get('transcode_reason_subtitle');
+      case 'DirectPlayNotAllowed':
+        return _get('transcode_reason_direct_play_blocked');
+      case 'ContainerBitrateExceedsLimit':
+        return _get('transcode_reason_bitrate');
+      default:
+        return reason;
+    }
+  }
   String get listLoop => _get('list_loop');
   String get singleLoop => _get('single_loop');
   String get noLoop => _get('no_loop');

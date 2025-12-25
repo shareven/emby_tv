@@ -221,6 +221,13 @@ class EmbyService {
     return jsonDecode(response.body);
   }
 
+  Future<List<dynamic>> getSessions() async {
+    final response = await http(
+      '/Sessions?deviceId=$_deviceId&X-Emby-Device-Id=$_deviceId&X-Emby-Token=$_apiKey',
+    );
+    return jsonDecode(response.body);
+  }
+
   Future<List<dynamic>> getLatestItems(String userId) async {
     List list = await getViews(userId);
     List resList = await Future.wait(

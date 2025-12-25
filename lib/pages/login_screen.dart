@@ -1,4 +1,5 @@
 import 'package:emby_tv/app_model.dart';
+import 'package:emby_tv/pages/update_screen.dart';
 import 'package:emby_tv/utils.dart';
 import 'package:emby_tv/widgets/build_gradient_background.dart';
 import 'package:emby_tv/widgets/tv_input_dialog.dart';
@@ -26,8 +27,16 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-
     _loadSavedCredentials();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadVersion();
+    });
+  }
+
+  Future<void> _loadVersion() async {
+    if (mounted) {
+      await context.read<AppModel>().checkUpdate();
+    }
   }
 
   Future<void> _loadSavedCredentials() async {
@@ -165,6 +174,11 @@ class _LoginScreenState extends State<LoginScreen> {
             );
             return KeyEventResult.handled;
           }
+          if (key == LogicalKeyboardKey.contextMenu &&
+              context.watch<AppModel>().needUpdate) {
+            _showMenuDialog();
+            return KeyEventResult.handled;
+          }
         }
         return KeyEventResult.ignored;
       },
@@ -230,9 +244,14 @@ class _LoginScreenState extends State<LoginScreen> {
         if (event is KeyDownEvent) {
           final key = event.logicalKey;
           if (key == LogicalKeyboardKey.accept ||
-                key == LogicalKeyboardKey.select ||
-                key == LogicalKeyboardKey.enter) {
+              key == LogicalKeyboardKey.select ||
+              key == LogicalKeyboardKey.enter) {
             _handleLogin();
+            return KeyEventResult.handled;
+          }
+          if (key == LogicalKeyboardKey.contextMenu &&
+              context.watch<AppModel>().needUpdate) {
+            _showMenuDialog();
             return KeyEventResult.handled;
           }
         }
@@ -310,6 +329,93 @@ class _LoginScreenState extends State<LoginScreen> {
     _passController.dispose();
 
     super.dispose();
+  }
+
+  void _showMenuDialog() async {
+    await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.black.withValues(alpha: 0.6),
+        content: SizedBox(
+          width: 800,
+          height: 600,
+          child: ListView(
+            children: [
+              Focus(
+                autofocus: true,
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent) {
+                    final key = event.logicalKey;
+                    if (key == LogicalKeyboardKey.accept ||
+                        key == LogicalKeyboardKey.select ||
+                        key == LogicalKeyboardKey.enter) {
+                      Navigator.pop(context);
+                      return KeyEventResult.handled;
+                    }
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: Builder(
+                  builder: (context) {
+                    FocusNode node = Focus.of(context);
+                    bool isFocused = node.hasFocus;
+                    return ListTile(
+                      title: Text(
+                        AppLocalizations.of(context)!.back,
+                        style: TextStyle(color: Colors.white, fontSize: 24),
+                      ),
+                      tileColor: isFocused
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                    );
+                  },
+                ),
+              ),
+
+              if (context.watch<AppModel>().needUpdate)
+                Focus(
+                  autofocus: true,
+                  onKeyEvent: (node, event) {
+                    if (event is KeyDownEvent) {
+                      final key = event.logicalKey;
+                      if (key == LogicalKeyboardKey.accept ||
+                          key == LogicalKeyboardKey.select ||
+                          key == LogicalKeyboardKey.enter) {
+                        Navigator.pop(context);
+                        _goUpdate();
+                        return KeyEventResult.handled;
+                      }
+                    }
+                    return KeyEventResult.ignored;
+                  },
+                  child: Builder(
+                    builder: (context) {
+                      FocusNode node = Focus.of(context);
+                      bool isFocused = node.hasFocus;
+                      return ListTile(
+                        title: Text(
+                          AppLocalizations.of(context)!.downloadLatestVersion,
+                          style: TextStyle(color: Colors.white, fontSize: 24),
+                        ),
+                        tileColor: isFocused
+                            ? Theme.of(context).colorScheme.primary
+                            : null,
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _goUpdate() {
+    final model = context.read<AppModel>();
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (context) => UpdateScreen()))
+        .then((_) => model.loadData());
   }
 
   Future<void> _handleLogin() async {

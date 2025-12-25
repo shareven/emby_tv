@@ -44,6 +44,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _isLoading = false;
   Map _media = {};
   Map _mediaInfo = {};
+  Map? _session;
+  bool _hasSessionLoaded = false;
 
   List _subtitleTracks = [];
   int _selectedSubtitleIndex = -1;
@@ -180,6 +182,40 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _subtitleCues = cues;
       _currentSubtitle = '';
     });
+    // load session info matching this playback
+  }
+
+  Future<void> _loadSessionForCurrent() async {
+    if (_hasSessionLoaded) return;
+    _hasSessionLoaded = true;
+    try {
+      final model = context.read<AppModel>();
+      final sessions = await model.getPlayingSessions();
+      if (sessions.isEmpty) return;
+      Map? found;
+      final playSessionId = _media['PlaySessionId']?.toString();
+      for (final s in sessions) {
+        if (s is Map) {
+          if (playSessionId != null &&
+              s['PlaySessionId']?.toString() == playSessionId) {
+            found = s;
+            break;
+          }
+          final now = s['NowPlayingItem'];
+          if (now is Map &&
+              (now['Id']?.toString() == widget.mediaId ||
+                  now['Id']?.toString() == _media['Id']?.toString())) {
+            found = s;
+            break;
+          }
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _session = found;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<List<_SubtitleCue>> _fetchSubtitleCues(
@@ -536,33 +572,94 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String _streamModeLine() {
     final source = _currentMediaSource;
     if (source == null) return '';
-    final transcodingUrl = source["TranscodingUrl"];
-    if (transcodingUrl == null || transcodingUrl.toString().isEmpty) {
+    // If session info available, use it to determine direct play vs transcode
+    final sess = _session;
+    bool supportsDirectPlay = false;
+    bool supportsDirectStream = false;
+    bool supportsProbing = false;
+    bool supportsTranscoding = false;
+    if (sess != null) {
+      supportsDirectPlay =
+          sess['SupportsDirectPlay'] == true ||
+          sess['SupportsDirectPlay'] == 'true';
+      supportsDirectStream =
+          sess['SupportsDirectStream'] == true ||
+          sess['SupportsDirectStream'] == 'true';
+      supportsProbing =
+          sess['SupportsProbing'] == true || sess['SupportsProbing'] == 'true';
+      supportsTranscoding =
+          sess['SupportsTranscoding'] == true ||
+          sess['SupportsTranscoding'] == 'true';
+    }
+
+    // fallback to source flags if session flags missing
+    supportsDirectPlay =
+        supportsDirectPlay ||
+        (source['SupportsDirectPlay'] == true ||
+            source['SupportsDirectPlay'] == 'true');
+    supportsDirectStream =
+        supportsDirectStream ||
+        (source['SupportsDirectStream'] == true ||
+            source['SupportsDirectStream'] == 'true');
+    supportsProbing =
+        supportsProbing ||
+        (source['SupportsProbing'] == true ||
+            source['SupportsProbing'] == 'true');
+    supportsTranscoding =
+        supportsTranscoding ||
+        (source['SupportsTranscoding'] == true ||
+            source['SupportsTranscoding'] == 'true');
+
+    bool shouldTranscode;
+    if (supportsDirectPlay || supportsDirectStream) {
+      shouldTranscode = false;
+    } else if (supportsProbing && !supportsTranscoding) {
+      shouldTranscode = false;
+    } else {
+      shouldTranscode = supportsTranscoding;
+    }
+
+    if (!shouldTranscode) {
       return AppLocalizations.of(context)!.directPlay;
     }
-    final protocol = (source["TranscodingProtocol"] ?? '')
-        .toString()
-        .toUpperCase();
-    final container = (source["TranscodingContainer"] ?? '')
-        .toString()
-        .toUpperCase();
-    final bitrate =
-        _asInt(source["Bitrate"]) ?? _asInt(source["TranscodingBitrate"]);
-    final bitrateStr = _formatMbpsFromBps(bitrate);
-    final parts = <String>[];
-    if (protocol.isNotEmpty) {
-      parts.add(protocol);
+
+    // Transcoding: prefer session-provided reasons if available
+    List reasons = [];
+    try {
+      if (sess != null) {
+        final ti = sess['TranscodingInfo'] ?? sess['Transcoding'];
+        if (ti is Map) {
+          final r =
+              ti['TranscodeReasons'] ??
+              ti['TranscodeReason'] ??
+              ti['TranscodeReasons'];
+          if (r is List) reasons = r;
+        }
+        if (reasons.isEmpty && sess['TranscodeReasons'] is List) {
+          reasons = sess['TranscodeReasons'];
+        }
+      }
+    } catch (_) {}
+
+    if (reasons.isEmpty) {
+      // fallback to source-level transcoding info
+      final r = source['TranscodeReasons'];
+      if (r is List) reasons = r;
     }
-    if (container.isNotEmpty) {
-      parts.add(container);
-    }
-    if (bitrateStr.isNotEmpty) {
-      parts.add(bitrateStr);
-    }
-    if (parts.isEmpty) {
+
+    if (reasons.isEmpty) {
       return AppLocalizations.of(context)!.transcode;
     }
-    return parts.join(' ');
+
+    final localized = reasons
+        .map((e) {
+          final key = e?.toString() ?? '';
+          return AppLocalizations.of(context)!.transcodeReason(key);
+        })
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (localized.isEmpty) return AppLocalizations.of(context)!.transcode;
+    return '${AppLocalizations.of(context)!.transcode} (${localized.join(', ')})';
   }
 
   String _videoMainLine() {
@@ -570,12 +667,52 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final source = _currentMediaSource;
     if (video == null && source == null) return '';
     if (video?["DisplayTitle"] != null) return video?["DisplayTitle"];
+    // prefer session-provided info when available
+    final sess = _session;
+    bool isVideoDirect = true;
+    if (sess != null && sess['TranscodingInfo']?['IsVideoDirect'] != null) {
+      isVideoDirect =
+          sess['TranscodingInfo']?['IsVideoDirect'] == true ||
+          sess['TranscodingInfo']?['IsVideoDirect'] == 'true';
+    }
+
     final height = _asInt(video?["Height"]) ?? _asInt(source?["Height"]);
-    final codec = (video?["Codec"] ?? '').toString().toUpperCase();
     String res = '';
     if (height != null && height > 0) {
       res = '${height}p';
     }
+
+    if (!isVideoDirect) {
+      String codec = '';
+      int? bitrate;
+      try {
+        final ti = (sess != null)
+            ? (sess['TranscodingInfo'] ?? sess['Transcoding'])
+            : null;
+        if (ti is Map) {
+          codec = (ti['VideoCodec'] ?? ti['Codec'] ?? ti['Video'] ?? '')
+              .toString()
+              .toUpperCase();
+          bitrate = _asInt(
+            ti['VideoBitrate'] ?? ti['Bitrate'] ?? ti['TranscodingBitrate'],
+          );
+        }
+      } catch (_) {}
+      codec = codec.isEmpty
+          ? (video?["Codec"] ?? '').toString().toUpperCase()
+          : codec;
+      final bitrateStr = _formatMbpsFromBps(
+        bitrate ?? _asInt(source?["TranscodingBitrate"]),
+      );
+      if (res.isEmpty && codec.isEmpty && bitrateStr.isEmpty) return '';
+      final parts = <String>[];
+      if (res.isNotEmpty) parts.add(res);
+      if (codec.isNotEmpty) parts.add(codec);
+      if (bitrateStr.isNotEmpty) parts.add(bitrateStr);
+      return parts.join(' ');
+    }
+
+    final codec = (video?["Codec"] ?? '').toString().toUpperCase();
     if (res.isEmpty && codec.isEmpty) return '';
     if (codec.isEmpty) return res;
     if (res.isEmpty) return codec;
@@ -589,14 +726,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final profile = (video?["Profile"] ?? '').toString();
     final levelVal = _asInt(video?["Level"]);
     final level = levelVal != null && levelVal > 0 ? levelVal.toString() : '';
-    final bitrate =
+    
+
+    String fps = _formatFps(
+      video?["AverageFrameRate"] ?? video?["RealFrameRate"],
+    );
+    
+    final bitrateVal =
         _asInt(video?["BitRate"]) ??
         _asInt(source?["Bitrate"]) ??
         _asInt(source?["TranscodingBitrate"]);
-    final bitrateStr = _formatMbpsFromBps(bitrate);
-    final fps = _formatFps(
-      video?["AverageFrameRate"] ?? video?["RealFrameRate"],
-    );
+    final bitrateStr = _formatMbpsFromBps(bitrateVal);
     final parts = <String>[];
     if (profile.isNotEmpty) {
       parts.add(profile);
@@ -620,35 +760,46 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (transcodingUrl == null || transcodingUrl.toString().isEmpty) {
       return AppLocalizations.of(context)!.directPlay;
     }
-    if(_playbackCorrection == 1) {
-      return AppLocalizations.of(context)!.transcode;
+    final sess = _session;
+    bool isVideoDirect = true;
+    if (sess != null && sess['TranscodingInfo']?['IsVideoDirect'] != null) {
+      isVideoDirect =
+          sess['TranscodingInfo']?['IsVideoDirect'] == true ||
+          sess['TranscodingInfo']?['IsVideoDirect'] == 'true';
     }
-    final codec = (source["TranscodingVideoCodec"] ?? '')
-        .toString()
-        .toUpperCase();
-    if (codec.isEmpty) {
+
+    if (isVideoDirect) {
       return AppLocalizations.of(context)!.directPlay;
     }
-    final bitrate =
-        _asInt(source["TranscodingBitrate"]) ?? _asInt(source["Bitrate"]);
+    String vcodec = "";
+    int? bitrate;
+    final ti = (sess != null)
+        ? (sess['TranscodingInfo'] ?? sess['Transcoding'])
+        : null;
+    if (ti is Map) {
+      vcodec = (ti['VideoCodec'] ?? ti['Codec'] ?? '').toString();
+      bitrate = _asInt(
+        ti['VideoBitrate'] ?? ti['VideoBitrate'] ?? ti['TranscodingBitrate'],
+      );
+    }
+
     final mbps = _formatMbpsFromBps(bitrate);
     if (mbps.isEmpty) {
-      return '${AppLocalizations.of(context)!.transcode} ($codec)';
+      return '${AppLocalizations.of(context)!.transcode} ($vcodec)';
     }
-    return '${AppLocalizations.of(context)!.transcode} ($codec $mbps)';
+    return '${AppLocalizations.of(context)!.transcode} ($vcodec $mbps)';
   }
 
   String _currentPlayMethod() {
     final source = _currentMediaSource;
-    if (source == null) return 'DirectStream';
-    final transcodingUrl = source["TranscodingUrl"];
-    if (transcodingUrl == null || transcodingUrl.toString().isEmpty) {
+    if (_playbackCorrection == 1) {
+      return 'Transcode';
+    }
+    if (source == null) return 'DirectPlay';
+    if (source["SupportsDirectPlay"] == true) {
       return 'DirectStream';
     }
-    final codec = (source["TranscodingVideoCodec"] ?? '')
-        .toString()
-        .toUpperCase();
-    if (codec.isEmpty) {
+    if (source["SupportsDirectStream"] == true) {
       return 'DirectStream';
     }
     return 'Transcode';
@@ -667,8 +818,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } else {
       languageLabel = AppLocalizations.of(context)!.unknown;
     }
-    final codec = (audio["Codec"] ?? '').toString().toUpperCase();
+    // determine if audio is direct from session
+    final source = _currentMediaSource;
+    final sess = _session;
+    bool isAudioDirect = true;
+    if (sess != null && sess['TranscodingInfo']?['IsAudioDirect'] != null) {
+      isAudioDirect =
+          sess['TranscodingInfo']?['IsAudioDirect'] == true ||
+          sess['TranscodingInfo']?['IsAudioDirect'] == 'true';
+    }
+
+    String codec = (audio["Codec"] ?? '').toString().toUpperCase();
     final channels = _asInt(audio["Channels"]);
+    if (!isAudioDirect) {
+      try {
+        final ti = (sess != null)
+            ? (sess['TranscodingInfo'] ?? sess['Transcoding'])
+            : null;
+        if (ti is Map) {
+          codec = (ti['AudioCodec'] ?? ti['Audio'] ?? ti['Codec'] ?? codec)
+              .toString()
+              .toUpperCase();
+        }
+      } catch (_) {}
+    }
     String channelLabel = '';
     if (channels != null) {
       if (channels == 2) {
@@ -684,7 +857,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (channelLabel.isNotEmpty) {
       parts.add(channelLabel);
     }
-    final source = _currentMediaSource;
     final defaultIndex = _asInt(source?["DefaultAudioStreamIndex"]);
     if (defaultIndex != null && audio["Index"] == defaultIndex) {
       parts.add(AppLocalizations.of(context)!.defaultMarker);
@@ -695,8 +867,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String _audioDetailLine() {
     final audio = _currentAudioStream;
     if (audio == null) return '';
-    final bitrate = _asInt(audio["BitRate"]);
+    // prefer session transcoding audio bitrate when available
+   
+    int? bitrate = _asInt(audio["BitRate"]);
     final sampleRate = _asInt(audio["SampleRate"]);
+    
     final kbps = _formatKbps(bitrate);
     final hz = _formatHz(sampleRate);
     if (kbps.isEmpty && hz.isEmpty) return '';
@@ -712,12 +887,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (transcodingUrl == null || transcodingUrl.toString().isEmpty) {
       return AppLocalizations.of(context)!.directPlay;
     }
-    final codec = (source["TranscodingAudioCodec"] ?? '')
-        .toString()
-        .toUpperCase();
-    final audio = _currentAudioStream;
-    final bitrate =
-        _asInt(audio?["BitRate"]) ?? _asInt(source["TranscodingBitrate"]);
+    final sess = _session;
+    bool isAudioDirect = true;
+    if (sess != null && sess['TranscodingInfo']?['IsAudioDirect'] != null) {
+      isAudioDirect =
+          sess['TranscodingInfo']?['IsAudioDirect'] == true ||
+          sess['TranscodingInfo']?['IsAudioDirect'] == 'true';
+    }
+    if (isAudioDirect) {
+      return AppLocalizations.of(context)!.directPlay;
+    }
+    int? bitrate;
+    String codec = '';
+    if (sess != null) {
+      final ti = sess['TranscodingInfo'] ?? sess['Transcoding'];
+      if (ti is Map) {
+        bitrate = _asInt(
+          ti['AudioBitrate'] ?? ti['AudioBitrate'] ?? ti['TranscodingBitrate'],
+        );
+      }
+       
+        if (ti is Map) {
+          codec = (ti['AudioCodec'] ?? ti['Audio'] ?? ti['Codec'] ?? codec)
+              .toString()
+              .toUpperCase();
+        }
+    }
     final kbps = _formatKbps(bitrate);
     if (codec.isEmpty && kbps.isEmpty) {
       return AppLocalizations.of(context)!.transcode;
@@ -750,6 +945,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         return;
       }
       if (!mounted) return;
+      if (isPlaying) {
+        _loadSessionForCurrent();
+      }
       setState(() {
         _position = Duration(milliseconds: positionMs);
         _duration = Duration(milliseconds: durationMs);
@@ -796,7 +994,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // list loop: try to get next episode from series listing
       final seriesId = _mediaInfo['SeriesId']?.toString();
 
-      if (seriesId == null ) return;
+      if (seriesId == null) return;
 
       final model = context.read<AppModel>();
       List nextList = await model.getSeriesList(seriesId);
