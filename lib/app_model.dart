@@ -245,7 +245,11 @@ class AppModel with ChangeNotifier {
   }
 
   Future<List> getPlayingSessions() async {
-      final res = await EmbyService( _serverUrl!, _apiKey!, _deviceId).getSessions();
-      return res;
+    final res = await EmbyService(
+      _serverUrl!,
+      _apiKey!,
+      _deviceId,
+    ).getSessions();
+    return res;
   }
 }

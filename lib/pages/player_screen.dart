@@ -726,12 +726,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final profile = (video?["Profile"] ?? '').toString();
     final levelVal = _asInt(video?["Level"]);
     final level = levelVal != null && levelVal > 0 ? levelVal.toString() : '';
-    
 
     String fps = _formatFps(
       video?["AverageFrameRate"] ?? video?["RealFrameRate"],
     );
-    
+
     final bitrateVal =
         _asInt(video?["BitRate"]) ??
         _asInt(source?["Bitrate"]) ??
@@ -868,10 +867,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final audio = _currentAudioStream;
     if (audio == null) return '';
     // prefer session transcoding audio bitrate when available
-   
+
     int? bitrate = _asInt(audio["BitRate"]);
     final sampleRate = _asInt(audio["SampleRate"]);
-    
+
     final kbps = _formatKbps(bitrate);
     final hz = _formatHz(sampleRate);
     if (kbps.isEmpty && hz.isEmpty) return '';
@@ -906,12 +905,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ti['AudioBitrate'] ?? ti['AudioBitrate'] ?? ti['TranscodingBitrate'],
         );
       }
-       
-        if (ti is Map) {
-          codec = (ti['AudioCodec'] ?? ti['Audio'] ?? ti['Codec'] ?? codec)
-              .toString()
-              .toUpperCase();
-        }
+
+      if (ti is Map) {
+        codec = (ti['AudioCodec'] ?? ti['Audio'] ?? ti['Codec'] ?? codec)
+            .toString()
+            .toUpperCase();
+      }
     }
     final kbps = _formatKbps(bitrate);
     if (codec.isEmpty && kbps.isEmpty) {

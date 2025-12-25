@@ -222,6 +222,7 @@ class AppLocalizations {
         return reason;
     }
   }
+
   String get listLoop => _get('list_loop');
   String get singleLoop => _get('single_loop');
   String get noLoop => _get('no_loop');
