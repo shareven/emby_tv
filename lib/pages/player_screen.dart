@@ -1062,20 +1062,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
             return Focus(
               focusNode: node,
               onKeyEvent: (node, event) {
-                if (!isCurrent &&
-                    event is KeyDownEvent &&
-                    event.logicalKey == LogicalKeyboardKey.select) {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(
-                      builder: (context) => PlayerScreen(
-                        mediaId: it['Id']?.toString() ?? '',
-                        isSeries: (it['Type'] ?? '') == 'Series',
-                        playbackPositionTicks: ticks is int ? ticks : 0,
+                if (!isCurrent && event is KeyDownEvent) {
+                  final key = event.logicalKey;
+                  if (key == LogicalKeyboardKey.accept ||
+                      key == LogicalKeyboardKey.select ||
+                      key == LogicalKeyboardKey.enter) {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (context) => PlayerScreen(
+                          mediaId: it['Id']?.toString() ?? '',
+                          isSeries: (it['Type'] ?? '') == 'Series',
+                          playbackPositionTicks: ticks is int ? ticks : 0,
+                        ),
                       ),
-                    ),
-                  );
-                  return KeyEventResult.handled;
+                    );
+                    return KeyEventResult.handled;
+                  }
                 }
                 return KeyEventResult.ignored;
               },
@@ -1606,7 +1609,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               _handleKeyDown(event.logicalKey);
                               _seekRelative(offset);
                               break;
-                            case LogicalKeyboardKey.select:
+                            case LogicalKeyboardKey.accept ||
+                                LogicalKeyboardKey.select ||
+                                LogicalKeyboardKey.enter:
                               if (_isPlaying) {
                                 _pause();
                               } else {

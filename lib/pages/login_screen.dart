@@ -154,7 +154,10 @@ class _LoginScreenState extends State<LoginScreen> {
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
           final key = event.logicalKey;
-          if (key == LogicalKeyboardKey.select) {
+          if (key == LogicalKeyboardKey.accept ||
+              key == LogicalKeyboardKey.select ||
+              key == LogicalKeyboardKey.enter ||
+              key == LogicalKeyboardKey.arrowRight) {
             _showInputDialog(
               controller,
               label,
@@ -226,7 +229,9 @@ class _LoginScreenState extends State<LoginScreen> {
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
           final key = event.logicalKey;
-          if (key == LogicalKeyboardKey.select) {
+          if (key == LogicalKeyboardKey.accept ||
+                key == LogicalKeyboardKey.select ||
+                key == LogicalKeyboardKey.enter) {
             _handleLogin();
             return KeyEventResult.handled;
           }
@@ -324,7 +329,7 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _isLoading = true;
       });
-      
+
       await appModel.login(serverUrl, user, pw);
     } catch (e) {
       showErrorMsg('$loginFailedLabel: $e');
