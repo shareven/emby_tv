@@ -62,6 +62,9 @@ class AppLocalizations {
       'stereo': 'stereo',
       'default_marker': '(default)',
       'fps_suffix': 'fps',
+      'playback_correction': 'Playback correction',
+      'playback_correction_off': 'Off',
+      'playback_correction_server': 'Server transcode',
       'footer_notice':
           'This is a free open-source Emby client for learning and technical exchange; commercial use is prohibited.\nRepository: https://github.com/shareven/emby_tv',
     },
@@ -115,6 +118,9 @@ class AppLocalizations {
       'stereo': '立体声',
       'default_marker': '(默认)',
       'fps_suffix': 'fps',
+      'playback_correction': '播放校正',
+      'playback_correction_off': '关闭',
+      'playback_correction_server': '服务器转码',
       'footer_notice':
           '这是一个用于学习和技术交流的开源免费 Emby 客户端，禁止商业用途。\n开源地址：https://github.com/shareven/emby_tv',
     },
@@ -164,6 +170,9 @@ class AppLocalizations {
   String get episodes => _get('episodes');
   String get playback => _get('playback');
   String get subtitles => _get('subtitles');
+  String get playbackCorrection => _get('playback_correction');
+  String get playbackCorrectionOff => _get('playback_correction_off');
+  String get playbackCorrectionServer => _get('playback_correction_server');
   String get audio => _get('audio');
   String get disableSubtitles => _get('disable_subtitles');
   String get noEpisodesFound => _get('no_episodes_found');

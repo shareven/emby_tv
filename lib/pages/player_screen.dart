@@ -61,6 +61,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       GlobalKey<ExoPlayerViewState>();
   // 0: list loop, 1: single loop, 2: no loop
   int _playMode = 0;
+  // 0: off, 1: server transcode
+  int _playbackCorrection = 0;
   bool _endedHandled = false;
   // cache series items to avoid repeated requests
   final Map<String, List> _seriesCache = {};
@@ -75,11 +77,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
         widget.audioStreamIndexOverride == null) {
       _isLoading = true;
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _getData();
-      _loadPlayMode();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _loadPlaybackCorrection();
+      await _loadPlayMode();
+      await _getData();
       _startProgressTracking();
     });
+  }
+
+  Future<void> _loadPlaybackCorrection() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final v = prefs.getInt('playback_correction');
+      if (v != null) {
+        setState(() {
+          _playbackCorrection = v;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _savePlaybackCorrection() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('playback_correction', _playbackCorrection);
+    } catch (_) {}
   }
 
   Future<void> _loadPlayMode() async {
@@ -111,6 +133,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       widget.mediaId,
       widget.playbackPositionTicks,
       widget.isSeries,
+      // if user selected server transcode, ask server for a transcode-capable response
+      disableHevc: _playbackCorrection == 1,
     );
     if (media.isEmpty || media["MediaSources"] == null) {
       showErrorMsg(failedGetPlaybackInfoLabel);
@@ -137,8 +161,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _selectedAudioIndex = widget.audioStreamIndexOverride!;
     }
 
-    final videoUrl =
-        "$serverUrl/emby${media['MediaSources'][0]['DirectStreamUrl']}";
+    String? path = media['MediaSources'][0]['DirectStreamUrl'] as String?;
+    if (_playbackCorrection == 1) {
+      // prefer TranscodingUrl when server transcode requested
+      path = media['MediaSources'][0]['TranscodingUrl'] as String? ?? path;
+    }
+    final videoUrl = path != null ? "$serverUrl/emby$path" : null;
 
     List<_SubtitleCue> cues = [];
     if (_selectedSubtitleIndex != -1) {
@@ -592,6 +620,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (transcodingUrl == null || transcodingUrl.toString().isEmpty) {
       return AppLocalizations.of(context)!.directPlay;
     }
+    if(_playbackCorrection == 1) {
+      return AppLocalizations.of(context)!.transcode;
+    }
     final codec = (source["TranscodingVideoCodec"] ?? '')
         .toString()
         .toUpperCase();
@@ -730,8 +761,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (!_endedHandled && durationMs > 0) {
         final nearEnd = positionMs >= (durationMs - 1000);
         if (nearEnd && !_isPlaying) {
-          _endedHandled = true;
           _onPlaybackEnded();
+          _endedHandled = true;
         }
       }
       if (_isLoading && _isPlaying && widget.playbackPositionTicks > 0) {
@@ -765,12 +796,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // list loop: try to get next episode from series listing
       final seriesId = _mediaInfo['SeriesId']?.toString();
 
-      if (seriesId != null && seriesId.isNotEmpty) return;
+      if (seriesId == null ) return;
 
       final model = context.read<AppModel>();
-      List nextList = await model.getSeriesList(widget.mediaId);
+      List nextList = await model.getSeriesList(seriesId);
 
-      final firstSource = _media['MediaSources']?.firstOrNull;
+      final firstSource = _media['MediaSources']?[0];
       String currentItemId = firstSource?['ItemId']?.toString() ?? '';
       int idx = nextList.indexWhere(
         (it) => it is Map && it['Id']?.toString() == currentItemId,
@@ -1132,7 +1163,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
             if (seriesId != null && seriesId.isNotEmpty) {
               tabs.addAll([i10n.episodes, i10n.playback]);
             }
-            tabs.addAll([i10n.info, i10n.subtitles, i10n.audio]);
+            tabs.addAll([
+              i10n.info,
+              i10n.subtitles,
+              i10n.audio,
+              i10n.playbackCorrection,
+            ]);
 
             Widget buildTab(String label, int index) {
               final bool isSelected = selectedTab == index;
@@ -1435,6 +1471,107 @@ class _PlayerScreenState extends State<PlayerScreen> {
               );
             }
 
+            Widget buildPlaybackCorrectionTab() {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Focus(
+                    autofocus: _playbackCorrection == 0,
+                    child: Builder(
+                      builder: (context) {
+                        final node = Focus.of(context);
+                        final isFocused = node.hasFocus;
+                        final bool isSelected = _playbackCorrection == 0;
+                        Color? color;
+                        if (isFocused) {
+                          color = Theme.of(context).colorScheme.primary;
+                        } else if (isSelected) {
+                          color = Colors.white24;
+                        }
+                        return ListTile(
+                          title: Text(
+                            i10n.playbackCorrectionOff,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                            ),
+                          ),
+                          tileColor: color,
+                          enabled: _playbackCorrection != 0,
+                          onTap: () async {
+                            setState(() {
+                              _playbackCorrection = 0;
+                            });
+                            await _savePlaybackCorrection();
+                            // reload playback info/source
+                            if (!mounted) return;
+                            Navigator.of(context).pop();
+                            Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(
+                                builder: (context) => PlayerScreen(
+                                  mediaId: widget.mediaId,
+                                  isSeries: widget.isSeries,
+                                  playbackPositionTicks:
+                                      _position.inMilliseconds * 10000,
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+
+                  Focus(
+                    autofocus: _playbackCorrection == 1,
+                    child: Builder(
+                      builder: (context) {
+                        final node = Focus.of(context);
+                        final isFocused = node.hasFocus;
+                        final bool isSelected = _playbackCorrection == 1;
+                        Color? color;
+                        if (isFocused) {
+                          color = Theme.of(context).colorScheme.primary;
+                        } else if (isSelected) {
+                          color = Colors.white24;
+                        }
+                        return ListTile(
+                          title: Text(
+                            i10n.playbackCorrectionServer,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                            ),
+                          ),
+                          tileColor: color,
+                          enabled: _playbackCorrection != 1,
+                          onTap: () async {
+                            setState(() {
+                              _playbackCorrection = 1;
+                            });
+                            await _savePlaybackCorrection();
+                            // reload playback info/source and use server transcode
+                            if (!mounted) return;
+                            Navigator.of(context).pop();
+                            Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(
+                                builder: (context) => PlayerScreen(
+                                  mediaId: widget.mediaId,
+                                  isSeries: widget.isSeries,
+                                  playbackPositionTicks:
+                                      _position.inMilliseconds * 10000,
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            }
+
             Widget content;
             final currentTab = tabs[selectedTab];
 
@@ -1446,15 +1583,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
               content = buildSubtitleTab();
             } else if (currentTab == i10n.audio) {
               content = buildAudioTab();
+            } else if (currentTab == i10n.playbackCorrection) {
+              content = buildPlaybackCorrectionTab();
             } else if (currentTab == i10n.playback) {
               content = ListView.builder(
                 itemCount: 3,
                 itemBuilder: (context, index) {
-                  final labels = [
-                    i10n.listLoop,
-                    i10n.singleLoop,
-                    i10n.noLoop,
-                  ];
+                  final labels = [i10n.listLoop, i10n.singleLoop, i10n.noLoop];
                   final isSelected = _playMode == index;
                   return Focus(
                     autofocus: index == 0,
