@@ -1120,6 +1120,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _showAlert(BuildContext context) {
     int selectedTab = 0;
+    final i10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (context) {
@@ -1129,16 +1130,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
             final tabs = <String>[];
             if (seriesId != null && seriesId.isNotEmpty) {
-              tabs.addAll([
-                AppLocalizations.of(context)!.episodes,
-                AppLocalizations.of(context)!.playback,
-              ]);
+              tabs.addAll([i10n.episodes, i10n.playback]);
             }
-            tabs.addAll([
-              AppLocalizations.of(context)!.info,
-              AppLocalizations.of(context)!.subtitles,
-              AppLocalizations.of(context)!.audio,
-            ]);
+            tabs.addAll([i10n.info, i10n.subtitles, i10n.audio]);
 
             Widget buildTab(String label, int index) {
               final bool isSelected = selectedTab == index;
@@ -1296,7 +1290,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   if (items.isEmpty) {
                     return Center(
                       child: Text(
-                        AppLocalizations.of(context)!.noEpisodesFound,
+                        i10n.noEpisodesFound,
                         style: TextStyle(color: Colors.white),
                       ),
                     );
@@ -1331,7 +1325,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         if (isCloseRow) {
                           return ListTile(
                             title: Text(
-                              AppLocalizations.of(context)!.disableSubtitles,
+                              i10n.disableSubtitles,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 18,
@@ -1347,7 +1341,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         final track = _subtitleTracks[index - 1];
                         return ListTile(
                           title: Text(
-                            '${track["Language"] ?? AppLocalizations.of(context)!.unknown} - ${track["DisplayTitle"]}',
+                            '${track["Language"] ?? i10n.unknown} - ${track["DisplayTitle"]}',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
@@ -1383,14 +1377,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   } else if (lang.isNotEmpty) {
                     label = lang;
                   } else {
-                    label = AppLocalizations.of(context)!.unknown;
+                    label = i10n.unknown;
                   }
                   final codec = (track["Codec"] ?? '').toString().toUpperCase();
                   final channels = track["Channels"];
                   String channelLabel = '';
                   if (channels is int) {
                     if (channels == 2) {
-                      channelLabel = AppLocalizations.of(context)!.stereo;
+                      channelLabel = i10n.stereo;
                     } else {
                       channelLabel = '$channels ch';
                     }
@@ -1403,7 +1397,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     parts.add(channelLabel);
                   }
                   if (defaultIndex != null && track["Index"] == defaultIndex) {
-                    parts.add(AppLocalizations.of(context)!.defaultMarker);
+                    parts.add(i10n.defaultMarker);
                   }
                   final showName = title.isNotEmpty ? title : parts.join(' ');
                   return Focus(
@@ -1443,22 +1437,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
             Widget content;
             final currentTab = tabs[selectedTab];
-            if (currentTab == 'Info') {
+
+            if (currentTab == i10n.info) {
               content = buildInfoTab();
-            } else if (currentTab == 'Episodes') {
+            } else if (currentTab == i10n.episodes) {
               content = buildEpisodesTab();
-            } else if (currentTab == 'Subtitles') {
+            } else if (currentTab == i10n.subtitles) {
               content = buildSubtitleTab();
-            } else if (currentTab == 'Audio') {
+            } else if (currentTab == i10n.audio) {
               content = buildAudioTab();
-            } else if (currentTab == 'Playback') {
+            } else if (currentTab == i10n.playback) {
               content = ListView.builder(
                 itemCount: 3,
                 itemBuilder: (context, index) {
                   final labels = [
-                    AppLocalizations.of(context)!.listLoop,
-                    AppLocalizations.of(context)!.singleLoop,
-                    AppLocalizations.of(context)!.noLoop,
+                    i10n.listLoop,
+                    i10n.singleLoop,
+                    i10n.noLoop,
                   ];
                   final isSelected = _playMode == index;
                   return Focus(
