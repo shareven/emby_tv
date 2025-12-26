@@ -1,6 +1,5 @@
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:overlay_support/overlay_support.dart';
@@ -93,438 +92,139 @@ const MethodChannel _deviceCapabilitiesChannel = MethodChannel(
   'emby_tv/device_capabilities',
 );
 
-Future<Map<String, dynamic>> getDeviceCapabilities() async {
-  final fallback = <String, dynamic>{
-    "maxWidth": 1920,
-    "maxHeight": 1080,
-    "videoCodecs": ["h264"],
-    "audioCodecs": ["aac", "mp3"],
-    "containers": ["mp4", "m4v", "mov", "3gp", "mkv", "webm", "ts", "flv"],
-  };
-  if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
-    return fallback;
-  }
+/// 构建用于发送给 /Items/{Id}/PlaybackInfo 的请求体
+/// [disableHevc]: 如果为 true，则从直接播放列表中移除 HEVC 编码，强制服务器进行 H264 转码
+Future<Map<String, dynamic>> buildPlaybackInfoBody({
+  bool disableHevc = false,
+  int maxStreamingBitrate = 140000000, // 默认 140Mbps (2025年 4K 蓝光标准)
+}) async {
   try {
+    // 1. 获取 Kotlin 探测的硬件能力
     final result = await _deviceCapabilitiesChannel
         .invokeMethod<Map<dynamic, dynamic>>('getCapabilities');
-    if (result == null) {
-      return fallback;
+
+    if (result == null) throw Exception("无法获取设备硬件信息");
+
+    // 2. 提取基础数据
+    List<String> videoCodecs = List<String>.from(result['VideoCodecs'] ?? []);
+    List<String> audioCodecs = List<String>.from(result['AudioCodecs'] ?? []);
+    final List<dynamic> videoProfiles = result['VideoProfiles'] ?? [];
+
+    // --- 关键逻辑：根据参数禁用 HEVC ---
+    if (disableHevc) {
+      videoCodecs.removeWhere((codec) => codec == 'hevc' || codec == 'h265');
+      // 同时清理 Profile 列表中的 hevc 项
+      videoProfiles.removeWhere(
+        (p) => p['Codec'] == 'hevc' || p['Codec'] == 'h265',
+      );
     }
-    final videoCodecs =
-        (result["videoCodecs"] as List?)
-            ?.map((e) => e.toString())
-            .where((e) => e.isNotEmpty)
-            .toList() ??
-        <String>[];
-    final audioCodecs =
-        (result["audioCodecs"] as List?)
-            ?.map((e) => e.toString())
-            .where((e) => e.isNotEmpty)
-            .toList() ??
-        <String>[];
-    final containers =
-        (result["containers"] as List?)
-            ?.map((e) => e.toString())
-            .where((e) => e.isNotEmpty)
-            .toList() ??
-        <String>[];
-    final maxWidth = result["maxWidth"];
-    final maxHeight = result["maxHeight"];
-    return <String, dynamic>{
-      "maxWidth": maxWidth is int ? maxWidth : fallback["maxWidth"],
-      "maxHeight": maxHeight is int ? maxHeight : fallback["maxHeight"],
-      "videoCodecs": videoCodecs.isNotEmpty
-          ? videoCodecs
-          : fallback["videoCodecs"],
-      "audioCodecs": audioCodecs.isNotEmpty
-          ? audioCodecs
-          : fallback["audioCodecs"],
-      "containers": containers.isNotEmpty ? containers : fallback["containers"],
+
+    // 3. 构建 Emby DeviceProfile
+    return {
+      "DeviceProfile": {
+        "MaxStreamingBitrate": maxStreamingBitrate,
+        "MaxStaticBitrate": maxStreamingBitrate,
+
+        // 直接播放配置
+        "DirectPlayProfiles": [
+          {
+            "Container": "mkv,mp4,mov,ts,m3u8,webm,avi",
+            "Type": "Video",
+            // 这里的 videoCodecs 已根据 disableHevc 进行了过滤
+            "VideoCodec": videoCodecs.join(','),
+            "AudioCodec": audioCodecs.join(','),
+          },
+          {"Container": "mp3,flac,aac,m4a,opus", "Type": "Audio"},
+        ],
+
+        // 转码配置：明确告诉服务器，如果不直解，优先转码为 H.264 (兼容性最强)
+        "TranscodingProfiles": [
+          {
+            "Container": "ts",
+            "Type": "Video",
+            "AudioCodec": "aac,mp3",
+            "VideoCodec": "h264",
+            "Context": "Streaming",
+            "Protocol": "hls",
+          },
+        ],
+
+        // 编码细化限制
+        "CodecProfiles": [
+          // H.264 限制配置
+          {
+            "Type": "Video",
+            "Codec": "h264",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoLevel",
+                "Value": _findMaxLevel(videoProfiles, "h264", 51).toString(),
+                "IsRequired": true,
+              },
+            ],
+          },
+          // HEVC 限制配置 (仅在未禁用时添加)
+          if (!disableHevc &&
+              (videoCodecs.contains("hevc") || videoCodecs.contains("h265")))
+            {
+              "Type": "Video",
+              "Codec": "hevc",
+              "Conditions": [
+                {
+                  "Condition": "Equals",
+                  "Property": "VideoProfile",
+                  "Value": _findHevcProfile(videoProfiles),
+                  "IsRequired": false,
+                },
+              ],
+            },
+          // AV1 限制 (2025年设备主流)
+          if (videoCodecs.contains("av1"))
+            {"Type": "Video", "Codec": "av1", "Conditions": []},
+        ],
+
+        "SubtitleProfiles": [
+          {"Format": "srt", "Method": "External"},
+          {"Format": "srt", "Method": "Embed"},
+          {"Format": "ass", "Method": "Embed"},
+          {"Format": "ssa", "Method": "Embed"},
+          {"Format": "pgs", "Method": "Embed"}, // 2025年高端设备可尝试支持 PGS
+        ],
+
+        "MaxCanvasWidth": result['MaxCanvasWidth'] ?? 3840,
+        "MaxCanvasHeight": result['MaxCanvasHeight'] ?? 2160,
+      },
+      
+      "IsPlayback": true,
+      "AutoOpenLiveStream": true,
+      "MaxStreamingBitrate": maxStreamingBitrate,
+      "EnableDirectPlay": true,
+      "EnableDirectStream": true,
     };
-  } on PlatformException {
-    return fallback;
-  } catch (_) {
-    return fallback;
+  } catch (e) {
+    return {};
   }
 }
 
-const Map _playbackInfoBodyTemplate = {
-  "DeviceProfile": {
-    "MaxStaticBitrate": 140000000,
-    "MaxStreamingBitrate": 140000000,
-    "MusicStreamingTranscodingBitrate": 192000,
-    "DirectPlayProfiles": [
-      {
-        "Container": "mp4,m4v",
-        "Type": "Video",
-        "VideoCodec": "h264,h265,hevc,av1,vp8,vp9",
-        "AudioCodec": "mp3,aac,opus,flac,vorbis",
-      },
-      {
-        "Container": "mkv",
-        "Type": "Video",
-        "VideoCodec": "h264,h265,hevc,av1,vp8,vp9",
-        "AudioCodec": "mp3,aac,opus,flac,vorbis",
-      },
-      {
-        "Container": "flv",
-        "Type": "Video",
-        "VideoCodec": "h264",
-        "AudioCodec": "aac,mp3",
-      },
-      {
-        "Container": "3gp",
-        "Type": "Video",
-        "VideoCodec": "",
-        "AudioCodec": "mp3,aac,opus,flac,vorbis",
-      },
-      {
-        "Container": "mov",
-        "Type": "Video",
-        "VideoCodec": "h264",
-        "AudioCodec": "mp3,aac,opus,flac,vorbis",
-      },
-      {"Container": "opus", "Type": "Audio"},
-      {"Container": "mp3", "Type": "Audio", "AudioCodec": "mp3"},
-      {"Container": "mp2,mp3", "Type": "Audio", "AudioCodec": "mp2"},
-      {"Container": "m4a", "AudioCodec": "aac", "Type": "Audio"},
-      {"Container": "mp4", "AudioCodec": "aac", "Type": "Audio"},
-      {"Container": "flac", "Type": "Audio"},
-      {"Container": "webma,webm", "Type": "Audio"},
-      {
-        "Container": "wav",
-        "Type": "Audio",
-        "AudioCodec": "PCM_S16LE,PCM_S24LE",
-      },
-      {"Container": "ogg", "Type": "Audio"},
-      {
-        "Container": "webm",
-        "Type": "Video",
-        "AudioCodec": "vorbis,opus",
-        "VideoCodec": "av1,VP8,VP9",
-      },
-    ],
-    "TranscodingProfiles": [
-      {
-        "Container": "aac",
-        "Type": "Audio",
-        "AudioCodec": "aac",
-        "Context": "Streaming",
-        "Protocol": "hls",
-        "MaxAudioChannels": "2",
-        "MinSegments": "1",
-        "BreakOnNonKeyFrames": true,
-      },
-      {
-        "Container": "aac",
-        "Type": "Audio",
-        "AudioCodec": "aac",
-        "Context": "Streaming",
-        "Protocol": "http",
-        "MaxAudioChannels": "2",
-      },
-      {
-        "Container": "mp3",
-        "Type": "Audio",
-        "AudioCodec": "mp3",
-        "Context": "Streaming",
-        "Protocol": "http",
-        "MaxAudioChannels": "2",
-      },
-      {
-        "Container": "opus",
-        "Type": "Audio",
-        "AudioCodec": "opus",
-        "Context": "Streaming",
-        "Protocol": "http",
-        "MaxAudioChannels": "2",
-      },
-      {
-        "Container": "wav",
-        "Type": "Audio",
-        "AudioCodec": "wav",
-        "Context": "Streaming",
-        "Protocol": "http",
-        "MaxAudioChannels": "2",
-      },
-      {
-        "Container": "opus",
-        "Type": "Audio",
-        "AudioCodec": "opus",
-        "Context": "Static",
-        "Protocol": "http",
-        "MaxAudioChannels": "2",
-      },
-      {
-        "Container": "mp3",
-        "Type": "Audio",
-        "AudioCodec": "mp3",
-        "Context": "Static",
-        "Protocol": "http",
-        "MaxAudioChannels": "2",
-      },
-      {
-        "Container": "aac",
-        "Type": "Audio",
-        "AudioCodec": "aac",
-        "Context": "Static",
-        "Protocol": "http",
-        "MaxAudioChannels": "2",
-      },
-      {
-        "Container": "wav",
-        "Type": "Audio",
-        "AudioCodec": "wav",
-        "Context": "Static",
-        "Protocol": "http",
-        "MaxAudioChannels": "2",
-      },
-      {
-        "Container": "mkv",
-        "Type": "Video",
-        "AudioCodec": "mp3,aac,opus,flac,vorbis",
-        "VideoCodec": "h264,h265,hevc,av1,vp8,vp9",
-        "Context": "Static",
-        "MaxAudioChannels": "2",
-        "CopyTimestamps": true,
-      },
-      {
-        "Container": "ts",
-        "Type": "Video",
-        "AudioCodec": "mp3,aac",
-        "VideoCodec": "h264,h265,hevc,av1",
-        "Context": "Streaming",
-        "Protocol": "hls",
-        "MaxAudioChannels": "2",
-        "MinSegments": "1",
-        "BreakOnNonKeyFrames": true,
-        "ManifestSubtitles": "vtt",
-      },
-      {
-        "Container": "webm",
-        "Type": "Video",
-        "AudioCodec": "vorbis",
-        "VideoCodec": "vpx",
-        "Context": "Streaming",
-        "Protocol": "http",
-        "MaxAudioChannels": "2",
-      },
-      {
-        "Container": "mp4",
-        "Type": "Video",
-        "AudioCodec": "mp3,aac,opus,flac,vorbis",
-        "VideoCodec": "h264",
-        "Context": "Static",
-        "Protocol": "http",
-      },
-    ],
-    "ContainerProfiles": [],
-    "CodecProfiles": [
-      {
-        "Type": "VideoAudio",
-        "Codec": "aac",
-        "Conditions": [
-          {
-            "Condition": "Equals",
-            "Property": "IsSecondaryAudio",
-            "Value": "false",
-            "IsRequired": "false",
-          },
-        ],
-      },
-      {
-        "Type": "VideoAudio",
-        "Conditions": [
-          {
-            "Condition": "Equals",
-            "Property": "IsSecondaryAudio",
-            "Value": "false",
-            "IsRequired": "false",
-          },
-        ],
-      },
-      {
-        "Type": "Video",
-        "Codec": "h264",
-        "Conditions": [
-          {
-            "Condition": "EqualsAny",
-            "Property": "VideoProfile",
-            "Value": "high|main|baseline|constrained baseline|high 10",
-            "IsRequired": false,
-          },
-          {
-            "Condition": "LessThanEqual",
-            "Property": "VideoLevel",
-            "Value": "62",
-            "IsRequired": false,
-          },
-          {
-            "Condition": "LessThanEqual",
-            "Property": "Width",
-            "Value": "1920",
-            "IsRequired": false,
-          },
-        ],
-      },
-      {
-        "Type": "Video",
-        "Codec": "hevc",
-        "Conditions": [
-          {
-            "Condition": "EqualsAny",
-            "Property": "VideoCodecTag",
-            "Value": "hvc1|hev1|hevc|hdmv",
-            "IsRequired": false,
-          },
-          {
-            "Condition": "LessThanEqual",
-            "Property": "Width",
-            "Value": "1920",
-            "IsRequired": false,
-          },
-        ],
-      },
-      {
-        "Type": "Video",
-        "Conditions": [
-          {
-            "Condition": "LessThanEqual",
-            "Property": "Width",
-            "Value": "1920",
-            "IsRequired": false,
-          },
-        ],
-      },
-    ],
-    "SubtitleProfiles": [
-      {"Format": "vtt", "Method": "Hls"},
-      {"Format": "eia_608", "Method": "VideoSideData", "Protocol": "hls"},
-      {"Format": "eia_708", "Method": "VideoSideData", "Protocol": "hls"},
-      {"Format": "vtt", "Method": "External"},
-      {"Format": "ass", "Method": "External"},
-      {"Format": "ssa", "Method": "External"},
-    ],
-    "ResponseProfiles": [
-      {"Type": "Video", "Container": "m4v", "MimeType": "video/mp4"},
-    ],
-  },
-};
+// 找到 H264 的最高级别 (如 51, 52)
+int _findMaxLevel(List<dynamic> profiles, String codec, int defaultValue) {
+  try {
+    final p = profiles.firstWhere((item) => item['Codec'] == codec);
+    return p['MaxLevel'];
+  } catch (_) {
+    return defaultValue;
+  }
+}
 
-Future<Map<String, dynamic>> buildPlaybackInfoBody({
-  bool disableHevc = false,
-}) async {
-  final capabilities = await getDeviceCapabilities();
-  final base = Map<String, dynamic>.from(_playbackInfoBodyTemplate);
-  final deviceProfile = Map<String, dynamic>.from(base["DeviceProfile"] as Map);
-  final videoCodecs =
-      (capabilities["videoCodecs"] as List?)
-          ?.map((e) => e.toString().toLowerCase())
-          .where((e) => e.isNotEmpty)
-          .toSet()
-          .toList() ??
-      <String>["h264"];
-  final audioCodecs =
-      (capabilities["audioCodecs"] as List?)
-          ?.map((e) => e.toString().toLowerCase())
-          .where((e) => e.isNotEmpty)
-          .toSet()
-          .toList() ??
-      <String>["aac", "mp3"];
-  final containers =
-      (capabilities["containers"] as List?)
-          ?.map((e) => e.toString())
-          .where((e) => e.isNotEmpty)
-          .toSet()
-          .toList() ??
-      <String>["mp4", "m4v", "mov", "3gp", "mkv", "webm", "ts", "flv"];
-  var filteredVideoCodecs = videoCodecs;
-  if (disableHevc) {
-    filteredVideoCodecs = filteredVideoCodecs
-        .where((c) => !c.contains("hevc") && !c.contains("h265"))
-        .toList();
-    if (filteredVideoCodecs.isEmpty) {
-      filteredVideoCodecs = ["h264"];
-    }
+// 确定 HEVC 是否支持 Main10 (HDR)
+String _findHevcProfile(List<dynamic> profiles) {
+  try {
+    final p = profiles.firstWhere(
+      (item) => item['Codec'] == "hevc" || item['Codec'] == "h265",
+    );
+    return p['Profile'] ?? "Main";
+  } catch (_) {
+    return "Main";
   }
-  final videoCodecCsv = filteredVideoCodecs.join(',');
-  final audioCodecCsv = audioCodecs.join(',');
-  final directProfiles = (deviceProfile["DirectPlayProfiles"] as List)
-      .map((e) => Map<String, dynamic>.from(e as Map))
-      .toList();
-  for (final profile in directProfiles) {
-    final type = profile["Type"];
-    if (type == "Video") {
-      profile["VideoCodec"] = videoCodecCsv;
-      profile["AudioCodec"] = audioCodecCsv;
-      final existingContainers = (profile["Container"] as String?) ?? "";
-      if (existingContainers.isNotEmpty) {
-        final list = existingContainers
-            .split(',')
-            .map((e) => e.trim())
-            .where((e) => e.isNotEmpty)
-            .toList();
-        final supported = list.where(containers.contains).toList();
-        if (supported.isNotEmpty) {
-          profile["Container"] = supported.join(',');
-        } else {
-          profile["Container"] = containers.join(',');
-        }
-      } else {
-        profile["Container"] = containers.join(',');
-      }
-    } else if (type == "Audio") {
-      profile["AudioCodec"] = audioCodecCsv;
-      final existingContainers = (profile["Container"] as String?) ?? "";
-      if (existingContainers.isNotEmpty) {
-        final list = existingContainers
-            .split(',')
-            .map((e) => e.trim())
-            .where((e) => e.isNotEmpty)
-            .toList();
-        final supported = list.where(containers.contains).toList();
-        if (supported.isNotEmpty) {
-          profile["Container"] = supported.join(',');
-        }
-      }
-    }
-  }
-  deviceProfile["DirectPlayProfiles"] = directProfiles;
-  final rawCodecProfiles = deviceProfile["CodecProfiles"] as List?;
-  final codecProfiles = <Map<String, dynamic>>[];
-  if (rawCodecProfiles != null) {
-    for (final item in rawCodecProfiles) {
-      if (item is Map) {
-        final profile = Map<String, dynamic>.from(item);
-        final conditions = item["Conditions"];
-        if (conditions is List) {
-          profile["Conditions"] = conditions
-              .map((c) => c is Map ? Map<String, dynamic>.from(c) : c)
-              .toList();
-        }
-        codecProfiles.add(profile);
-      }
-    }
-  }
-  final maxWidth = capabilities["maxWidth"];
-  final widthValue = maxWidth is int && maxWidth > 0
-      ? maxWidth.toString()
-      : null;
-  if (widthValue != null) {
-    for (final profile in codecProfiles) {
-      final conditions = profile["Conditions"];
-      if (conditions is List) {
-        for (final condition in conditions) {
-          if (condition is Map &&
-              condition["Property"] == "Width" &&
-              condition["Condition"] == "LessThanEqual") {
-            condition["Value"] = widthValue;
-          }
-        }
-      }
-    }
-  }
-  deviceProfile["CodecProfiles"] = codecProfiles;
-  base["DeviceProfile"] = deviceProfile;
-  return base;
 }

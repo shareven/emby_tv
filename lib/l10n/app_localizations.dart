@@ -58,7 +58,9 @@ class AppLocalizations {
       'single_loop': 'Single loop',
       'no_loop': 'No loop',
       'direct_play': 'Direct play',
+      'directStream': 'Direct stream',
       'transcode': 'Transcode',
+      'hardware_acceleration': 'Hardware acceleration',
       'stereo': 'stereo',
       'default_marker': '(default)',
       'fps_suffix': 'fps',
@@ -123,7 +125,9 @@ class AppLocalizations {
       'single_loop': '单集循环',
       'no_loop': '不循环',
       'direct_play': '直接播放',
+      'directStream': '直接流处理',
       'transcode': '转码',
+      'hardware_acceleration': '硬件加速',
       'stereo': '立体声',
       'default_marker': '(默认)',
       'fps_suffix': 'fps',
@@ -227,7 +231,9 @@ class AppLocalizations {
   String get singleLoop => _get('single_loop');
   String get noLoop => _get('no_loop');
   String get directPlay => _get('direct_play');
+  String get directStream => _get('directStream');
   String get transcode => _get('transcode');
+  String get hardwareAcceleration => _get('hardware_acceleration');
   String get stereo => _get('stereo');
   String get defaultMarker => _get('default_marker');
   String get fpsSuffix => _get('fps_suffix');

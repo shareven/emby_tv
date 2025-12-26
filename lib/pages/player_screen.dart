@@ -571,95 +571,71 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   String _streamModeLine() {
     final source = _currentMediaSource;
-    if (source == null) return '';
-    // If session info available, use it to determine direct play vs transcode
     final sess = _session;
-    bool supportsDirectPlay = false;
-    bool supportsDirectStream = false;
-    bool supportsProbing = false;
-    bool supportsTranscoding = false;
-    if (sess != null) {
-      supportsDirectPlay =
-          sess['SupportsDirectPlay'] == true ||
-          sess['SupportsDirectPlay'] == 'true';
-      supportsDirectStream =
-          sess['SupportsDirectStream'] == true ||
-          sess['SupportsDirectStream'] == 'true';
-      supportsProbing =
-          sess['SupportsProbing'] == true || sess['SupportsProbing'] == 'true';
-      supportsTranscoding =
-          sess['SupportsTranscoding'] == true ||
-          sess['SupportsTranscoding'] == 'true';
+    if (source == null) return '';
+
+    final local = AppLocalizations.of(context)!;
+
+    // 1. 获取核心播放方法
+    String? playMethod = sess?['PlayMethod']?.toString();
+    if (playMethod == null) {
+      if (source['SupportsDirectPlay'] == true)
+        playMethod = 'DirectPlay';
+      else if (source['SupportsDirectStream'] == true)
+        playMethod = 'DirectStream';
+      else
+        playMethod = 'Transcode';
     }
 
-    // fallback to source flags if session flags missing
-    supportsDirectPlay =
-        supportsDirectPlay ||
-        (source['SupportsDirectPlay'] == true ||
-            source['SupportsDirectPlay'] == 'true');
-    supportsDirectStream =
-        supportsDirectStream ||
-        (source['SupportsDirectStream'] == true ||
-            source['SupportsDirectStream'] == 'true');
-    supportsProbing =
-        supportsProbing ||
-        (source['SupportsProbing'] == true ||
-            source['SupportsProbing'] == 'true');
-    supportsTranscoding =
-        supportsTranscoding ||
-        (source['SupportsTranscoding'] == true ||
-            source['SupportsTranscoding'] == 'true');
+    // 2. 处理直接播放和直接流处理
+    if (playMethod == 'DirectPlay') return local.directPlay;
+    if (playMethod == 'DirectStream') return local.directStream;
 
-    bool shouldTranscode;
-    if (supportsDirectPlay || supportsDirectStream) {
-      shouldTranscode = false;
-    } else if (supportsProbing && !supportsTranscoding) {
-      shouldTranscode = false;
-    } else {
-      shouldTranscode = supportsTranscoding;
-    }
+    // 3. 处理转码逻辑 (PlayMethod == 'Transcode')
+    List<dynamic> reasons = [];
+    bool isHardwareUpscale = false; // 是否为硬件加速
 
-    if (!shouldTranscode) {
-      return AppLocalizations.of(context)!.directPlay;
-    }
-
-    // Transcoding: prefer session-provided reasons if available
-    List reasons = [];
     try {
-      if (sess != null) {
-        final ti = sess['TranscodingInfo'] ?? sess['Transcoding'];
-        if (ti is Map) {
-          final r =
-              ti['TranscodeReasons'] ??
-              ti['TranscodeReason'] ??
-              ti['TranscodeReasons'];
-          if (r is List) reasons = r;
-        }
-        if (reasons.isEmpty && sess['TranscodeReasons'] is List) {
-          reasons = sess['TranscodeReasons'];
-        }
+      final ti = sess?['TranscodingInfo'];
+      if (ti is Map) {
+        // 获取转码原因
+        final r = ti['TranscodeReasons'];
+        if (r is List) reasons = r;
+
+        // 判断硬件加速状态
+        // 在 Emby API 中，IsVideoDirect 为 true 通常表示视频流是通过硬件直接处理的
+        // 或者检查是否存在具体的硬件加速类型 (如 vaapi, nvenc, qsv, mediacodec)
+        isHardwareUpscale =
+            ti['IsVideoDirect'] == true ||
+            ti['HardwareAccelerationType'] != null;
+      }
+
+      if (reasons.isEmpty) {
+        final r = source['TranscodeReasons'];
+        if (r is List) reasons = r;
       }
     } catch (_) {}
 
-    if (reasons.isEmpty) {
-      // fallback to source-level transcoding info
-      final r = source['TranscodeReasons'];
-      if (r is List) reasons = r;
-    }
+    // 4. 构建显示文本
+    // 如果是硬件加速，显示 "转码 (硬件) " 或 "⚡ 转码"
+    String baseStatus = isHardwareUpscale
+        ? '${local.transcode} (${local.hardwareAcceleration})'
+        : local.transcode;
 
-    if (reasons.isEmpty) {
-      return AppLocalizations.of(context)!.transcode;
-    }
+    if (reasons.isEmpty) return baseStatus;
 
-    final localized = reasons
+    // 5. 转换具体原因
+    final localizedReasons = reasons
         .map((e) {
           final key = e?.toString() ?? '';
-          return AppLocalizations.of(context)!.transcodeReason(key);
+          return local.transcodeReason(key);
         })
         .where((s) => s.isNotEmpty)
         .toList();
-    if (localized.isEmpty) return AppLocalizations.of(context)!.transcode;
-    return '${AppLocalizations.of(context)!.transcode} (${localized.join(', ')})';
+
+    if (localizedReasons.isEmpty) return baseStatus;
+
+    return '$baseStatus (${localizedReasons.join(', ')})';
   }
 
   String _videoMainLine() {
@@ -754,39 +730,60 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   String _videoModeLine() {
     final source = _currentMediaSource;
-    if (source == null) return '';
-    final transcodingUrl = source["TranscodingUrl"];
-    if (transcodingUrl == null || transcodingUrl.toString().isEmpty) {
-      return AppLocalizations.of(context)!.directPlay;
-    }
     final sess = _session;
-    bool isVideoDirect = true;
-    if (sess != null && sess['TranscodingInfo']?['IsVideoDirect'] != null) {
-      isVideoDirect =
-          sess['TranscodingInfo']?['IsVideoDirect'] == true ||
-          sess['TranscodingInfo']?['IsVideoDirect'] == 'true';
+    if (source == null) return '';
+
+    final local = AppLocalizations.of(context)!;
+
+    // 1. 获取播放方法
+    String? playMethod = sess?['PlayMethod']?.toString();
+    if (playMethod == null) {
+      final transcodingUrl = source["TranscodingUrl"];
+      playMethod = (transcodingUrl == null || transcodingUrl.toString().isEmpty)
+          ? 'DirectPlay'
+          : 'Transcode';
     }
 
-    if (isVideoDirect) {
-      return AppLocalizations.of(context)!.directPlay;
+    // 2. 核心逻辑优化：
+    // 在 Emby 中，DirectStream 意味着视频流被原样提取（Copy），只有容器或音频在变。
+    // 所以从“视频无损”的角度，它等同于 DirectPlay。
+    if (playMethod == 'DirectPlay' || playMethod == 'DirectStream') {
+      return local.directPlay;
     }
-    String vcodec = "";
+
+    // 3. 处理转码情况 (PlayMethod == 'Transcode')
+    final ti = sess?['TranscodingInfo'] ?? sess?['Transcoding'];
+    bool isHardware = false;
+    String vCodec = "";
     int? bitrate;
-    final ti = (sess != null)
-        ? (sess['TranscodingInfo'] ?? sess['Transcoding'])
-        : null;
+
     if (ti is Map) {
-      vcodec = (ti['VideoCodec'] ?? ti['Codec'] ?? '').toString();
+      // 即使 IsVideoDirect 为 true（硬件加速），视频也被重编码了，所以属于转码。
+      isHardware = ti['IsVideoDirect'] == true;
+      vCodec = (ti['VideoCodec'] ?? ti['Codec'] ?? '').toString().toUpperCase();
       bitrate = _asInt(
-        ti['VideoBitrate'] ?? ti['VideoBitrate'] ?? ti['TranscodingBitrate'],
+        ti['VideoBitrate'] ?? ti['Bitrate'] ?? ti['TranscodingBitrate'],
       );
     }
 
-    final mbps = _formatMbpsFromBps(bitrate);
-    if (mbps.isEmpty) {
-      return '${AppLocalizations.of(context)!.transcode} ($vcodec)';
+    // 额外校验：如果转码信息中明确视频是“直接串流”，则再次强制返回直接播放
+    // 这是一层保险，防止某些版本 Emby API 将 Remux 标记为 Transcode 却带了 IsVideoDirect
+    if (isHardware && playMethod == 'DirectStream') {
+      return local.directPlay;
     }
-    return '${AppLocalizations.of(context)!.transcode} ($vcodec $mbps)';
+
+    // 4. 格式化转码显示
+    final mbps = _formatMbpsFromBps(bitrate);
+    String hardwareTag = isHardware ? '⚡' : ''; // 标记是否为服务器硬件转码
+
+    String codecInfo = [
+      vCodec,
+      hardwareTag,
+      mbps,
+    ].where((e) => e.isNotEmpty).join(' ').trim();
+
+    if (codecInfo.isEmpty) return local.transcode;
+    return '${local.transcode} ($codecInfo)';
   }
 
   String _currentPlayMethod() {
@@ -881,48 +878,52 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   String _audioModeLine() {
     final source = _currentMediaSource;
-    if (source == null) return '';
-    final transcodingUrl = source["TranscodingUrl"];
-    if (transcodingUrl == null || transcodingUrl.toString().isEmpty) {
-      return AppLocalizations.of(context)!.directPlay;
-    }
     final sess = _session;
-    bool isAudioDirect = true;
-    if (sess != null && sess['TranscodingInfo']?['IsAudioDirect'] != null) {
-      isAudioDirect =
-          sess['TranscodingInfo']?['IsAudioDirect'] == true ||
-          sess['TranscodingInfo']?['IsAudioDirect'] == 'true';
-    }
-    if (isAudioDirect) {
-      return AppLocalizations.of(context)!.directPlay;
-    }
-    int? bitrate;
-    String codec = '';
-    if (sess != null) {
-      final ti = sess['TranscodingInfo'] ?? sess['Transcoding'];
-      if (ti is Map) {
-        bitrate = _asInt(
-          ti['AudioBitrate'] ?? ti['AudioBitrate'] ?? ti['TranscodingBitrate'],
-        );
-      }
+    if (source == null) return '';
 
-      if (ti is Map) {
-        codec = (ti['AudioCodec'] ?? ti['Audio'] ?? ti['Codec'] ?? codec)
-            .toString()
-            .toUpperCase();
-      }
+    final local = AppLocalizations.of(context)!;
+
+    // 1. 获取音频转码详情
+    final ti = sess?['TranscodingInfo'] ?? sess?['Transcoding'];
+
+    // 2. 判断音频是否为直接输出 (无损拷贝)
+    // 在 Emby API 中，IsAudioDirect 为 true 代表音频流没有被重编码
+    bool isAudioDirect = true; // 默认假设直接播放（如果没有转码信息）
+
+    if (ti is Map) {
+      isAudioDirect = ti['IsAudioDirect'] == true;
+    } else {
+      // 如果没有实时转码信息，且没有转码 URL，那一定是直接播放
+      final transcodingUrl = source["TranscodingUrl"];
+      isAudioDirect =
+          (transcodingUrl == null || transcodingUrl.toString().isEmpty);
     }
+
+    // 3. 如果是无损直接输出，直接返回“直接播放”
+    if (isAudioDirect) {
+      return local.directPlay;
+    }
+
+    // 4. 处理音频转码 (Audio Transcoding)
+    String codec = '';
+    int? bitrate;
+
+    if (ti is Map) {
+      // 获取转码后的音频编码 (如 AAC, MP3)
+      codec = (ti['AudioCodec'] ?? ti['Audio'] ?? ti['Codec'] ?? '')
+          .toString()
+          .toUpperCase();
+      // 获取音频码率
+      bitrate = _asInt(ti['AudioBitrate'] ?? ti['Bitrate']);
+    }
+
     final kbps = _formatKbps(bitrate);
-    if (codec.isEmpty && kbps.isEmpty) {
-      return AppLocalizations.of(context)!.transcode;
-    }
-    if (kbps.isEmpty) {
-      return '${AppLocalizations.of(context)!.transcode} ($codec)';
-    }
-    if (codec.isEmpty) {
-      return '${AppLocalizations.of(context)!.transcode} ($kbps)';
-    }
-    return '${AppLocalizations.of(context)!.transcode} ($codec $kbps)';
+
+    // 5. 格式化输出: "转码 (AAC 320 kbps)"
+    final info = [codec, kbps].where((e) => e.isNotEmpty).join(' ').trim();
+
+    if (info.isEmpty) return local.transcode;
+    return '${local.transcode} ($info)';
   }
 
   void _startProgressTracking() {
@@ -2006,7 +2007,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         child: const Center(child: CircularProgressIndicator()),
                       ),
                     ),
-                  if (!_isLoading && (_isShowInfo || !_isPlaying))
+                  if (!_isLoading && (!_isShowInfo || !_isPlaying))
                     Positioned(
                       top: 0,
                       left: 0,
@@ -2019,9 +2020,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.start,
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                              child: ListView(
                                 children: [
                                   Text(
                                     (_mediaInfo['SeriesName'] ??
