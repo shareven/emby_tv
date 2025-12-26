@@ -20,12 +20,10 @@ class PlayerScreen extends StatefulWidget {
   final String mediaId;
   final bool isSeries;
   final int playbackPositionTicks;
-  final int? audioStreamIndexOverride;
   const PlayerScreen({
     required this.mediaId,
     required this.isSeries,
     required this.playbackPositionTicks,
-    this.audioStreamIndexOverride,
     super.key,
   });
 
@@ -75,8 +73,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.playbackPositionTicks > 0 &&
-        widget.audioStreamIndexOverride == null) {
+    if (widget.playbackPositionTicks > 0) {
       _isLoading = true;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -128,48 +125,91 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future _getData() async {
     final model = context.read<AppModel>();
     if (!mounted) return;
-    final failedGetPlaybackInfoLabel = AppLocalizations.of(
-      context,
-    )!.failedGetPlaybackInfo;
+    final local = AppLocalizations.of(context)!;
+
+    // 1. 获取播放信息
     final media = await model.getPlaybackInfo(
       widget.mediaId,
       widget.playbackPositionTicks,
       widget.isSeries,
-      // if user selected server transcode, ask server for a transcode-capable response
       disableHevc: _playbackCorrection == 1,
     );
-    if (media.isEmpty || media["MediaSources"] == null) {
-      showErrorMsg(failedGetPlaybackInfoLabel);
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
+
+    if (media.isEmpty ||
+        media["MediaSources"] == null ||
+        (media["MediaSources"] as List).isEmpty) {
+      showErrorMsg(local.failedGetPlaybackInfo);
+      if (mounted) Navigator.of(context).pop();
       return;
     }
+
     final mediaInfo = await model.getMediaInfo(widget.mediaId);
     final serverUrl = model.serverUrl!;
-    final streams = media["MediaSources"][0]["MediaStreams"] as List;
-    _subtitleTracks = streams
-        .where((stream) => stream["Type"] == "Subtitle")
-        .toList();
-    _audioTracks = streams
-        .where((stream) => stream["Type"] == "Audio")
-        .toList();
+    final source = media["MediaSources"][0];
+    final List streams = source["MediaStreams"] ?? [];
 
-    _selectedSubtitleIndex =
-        media["MediaSources"][0]["DefaultSubtitleStreamIndex"] ?? -1;
-    _selectedAudioIndex =
-        media["MediaSources"][0]["DefaultAudioStreamIndex"] ?? -1;
-    if (widget.audioStreamIndexOverride != null) {
-      _selectedAudioIndex = widget.audioStreamIndexOverride!;
-    }
+    // 2. 提取轨道并记录当前选中的索引
+    _subtitleTracks = streams.where((s) => s["Type"] == "Subtitle").toList();
+    _audioTracks = streams.where((s) => s["Type"] == "Audio").toList();
 
-    String? path = media['MediaSources'][0]['DirectStreamUrl'] as String?;
+    _selectedAudioIndex = source["DefaultAudioStreamIndex"] ?? -1;
+    _selectedSubtitleIndex = source["DefaultSubtitleStreamIndex"] ?? -1;
+
+    // 3. 处理 URL 修正逻辑 (全容器适配)
+    String? path = source['DirectStreamUrl'] as String?;
     if (_playbackCorrection == 1) {
-      // prefer TranscodingUrl when server transcode requested
-      path = media['MediaSources'][0]['TranscodingUrl'] as String? ?? path;
+      path = source['TranscodingUrl'] as String? ?? path;
     }
+
+    // --- 核心修复逻辑：音轨与内置字幕通用修正 ---
+    if (path != null) {
+      // 1. 判断音轨是否为物理默认
+      bool isPhysicalDefaultAudio = false;
+      try {
+        final currentAudio = streams.firstWhere(
+          (s) => s["Type"] == "Audio" && s["Index"] == _selectedAudioIndex,
+        );
+        isPhysicalDefaultAudio = currentAudio["IsDefault"] == true;
+      } catch (_) {}
+
+      // 2. 判断字幕是否为内置且非物理默认
+      bool isInternalNonDefaultSubtitle = false;
+      try {
+        final currentSub = streams.firstWhere(
+          (s) =>
+              s["Type"] == "Subtitle" && s["Index"] == _selectedSubtitleIndex,
+        );
+        bool isInternal = currentSub["IsExternal"] != true;
+        bool isDefaultSub = currentSub["IsDefault"] == true;
+        if (isInternal && !isDefaultSub) {
+          isInternalNonDefaultSubtitle = true;
+        }
+      } catch (_) {}
+
+      // --- 关键修正：强制重定向 ---
+      if (!isPhysicalDefaultAudio || isInternalNonDefaultSubtitle) {
+        // 使用 replaceAllMapped 正确处理捕获组中的后缀
+        if (path.contains('original.')) {
+          path = path.replaceFirstMapped(RegExp(r'original\.(\w+)'), (match) {
+            String extension = match.group(1) ?? 'mkv'; // 提取匹配到的后缀（如 mp4, mkv）
+            return 'stream.$extension';
+          });
+        }
+
+        // 清理旧参数并追加音轨索引
+        path = path.replaceAll(RegExp(r'[&?]AudioStreamIndex=\d+'), '');
+        path =
+            '$path${path.contains('?') ? '&' : '?'}AudioStreamIndex=$_selectedAudioIndex';
+
+        // 追加字幕索引
+        path = path.replaceAll(RegExp(r'[&?]SubtitleStreamIndex=\d+'), '');
+        path = '$path&SubtitleStreamIndex=$_selectedSubtitleIndex';
+      }
+    }
+
     final videoUrl = path != null ? "$serverUrl/emby$path" : null;
 
+    // 4. 字幕处理 (外挂字幕或内置字幕的 Flutter 侧渲染)
     List<_SubtitleCue> cues = [];
     if (_selectedSubtitleIndex != -1) {
       cues = await _fetchSubtitleCues(media, _selectedSubtitleIndex);
@@ -181,8 +221,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _videoUrl = videoUrl;
       _subtitleCues = cues;
       _currentSubtitle = '';
+      _isLoading = false;
     });
-    // load session info matching this playback
   }
 
   Future<void> _loadSessionForCurrent() async {
@@ -230,36 +270,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
         break;
       }
     }
-    if (stream == null) {
-      return [];
-    }
+    if (stream == null) return [];
+
     final codec = (stream["Codec"] ?? "").toString().toLowerCase();
     final isAss = codec.contains('ass');
     final mediaSourceId = media["MediaSources"][0]["Id"];
     final model = context.read<AppModel>();
+
     final text = await model.getSubtitle(
       widget.mediaId,
       mediaSourceId,
       subtitleIndex,
       codec,
     );
-    final isEnglish = _isEnglishTrack(stream);
-    if (isAss) {
-      return _parseAss(text, isEnglish: isEnglish);
-    }
-    return _parseSrt(text, isEnglish: isEnglish);
+
+    return isAss
+        ? _parseAss(text, isEnglish: _isEnglishTrack(stream))
+        : _parseSrt(text, isEnglish: _isEnglishTrack(stream));
   }
 
   bool _isEnglishTrack(Map track) {
     final lang = (track["Language"] ?? "").toString().toLowerCase();
     final title = (track["DisplayTitle"] ?? "").toString().toLowerCase();
-    if (lang.contains('en')) {
-      return true;
-    }
-    if (title.contains('english')) {
-      return true;
-    }
-    return false;
+    return lang.contains('en') || title.contains('english');
   }
 
   List<_SubtitleCue> _parseAss(String content, {required bool isEnglish}) {
@@ -1450,7 +1483,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                       maxLines: 1,
-                      textAlign: TextAlign.center,
                       overflow: TextOverflow.fade,
                     ),
 
@@ -1659,7 +1691,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           tileColor: color,
                           onTap: () {
                             _updateAudio(track["Index"]);
-                            Navigator.of(context).pop();
                           },
                         );
                       },
@@ -1891,13 +1922,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     });
     await _reportProgress(ticks, eventName: "AudioTrackChange");
     if (!mounted) return;
+    Navigator.of(context).pop();
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (context) => PlayerScreen(
           mediaId: widget.mediaId,
           isSeries: widget.isSeries,
           playbackPositionTicks: ticks,
-          audioStreamIndexOverride: index,
         ),
       ),
     );
@@ -2032,7 +2063,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                       fontWeight: FontWeight.bold,
                                     ),
                                     maxLines: 1,
-                                    textAlign: TextAlign.center,
+                                    textAlign: TextAlign.left,
                                     overflow: TextOverflow.fade,
                                   ),
 

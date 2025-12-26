@@ -92,98 +92,90 @@ const MethodChannel _deviceCapabilitiesChannel = MethodChannel(
   'emby_tv/device_capabilities',
 );
 
-/// 构建用于发送给 /Items/{Id}/PlaybackInfo 的请求体
-/// [disableHevc]: 如果为 true，则从直接播放列表中移除 HEVC 编码，强制服务器进行 H264 转码
 Future<Map<String, dynamic>> buildPlaybackInfoBody({
   bool disableHevc = false,
-  int maxStreamingBitrate = 140000000, // 默认 140Mbps (2025年 4K 蓝光标准)
+  // 修正为 200Mbps，符合 2025 年 4K/8K 蓝光原盘标准
+  int maxStreamingBitrate = 200000000, 
 }) async {
   try {
-    // 1. 获取 Kotlin 探测的硬件能力
+    // 1. 获取硬件能力
     final result = await _deviceCapabilitiesChannel
         .invokeMethod<Map<dynamic, dynamic>>('getCapabilities');
 
     if (result == null) throw Exception("无法获取设备硬件信息");
 
-    // 2. 提取基础数据
+    // 2. 提取数据并转为可变列表 (处理 Unsupported operation 报错)
     List<String> videoCodecs = List<String>.from(result['VideoCodecs'] ?? []);
-    List<String> audioCodecs = List<String>.from(result['AudioCodecs'] ?? []);
-    final List<dynamic> videoProfiles = result['VideoProfiles'] ?? [];
+    final List<dynamic> videoProfiles = List<dynamic>.from(result['VideoProfiles'] ?? []);
 
-    // --- 音频优化：增加蓝光原盘常见高清音轨支持 ---
-    // 即使设备不支持自解，也要申明，以便在 DirectStream 模式下由客户端处理或 Downmix
-    final hdAudio = [
-      'ac3',
-      'eac3',
-      'dts',
-      'dtshd',
-      'truehd',
-      'aac',
-      'mp3',
-      'flac',
-    ];
-    for (var codec in hdAudio) {
-      if (!audioCodecs.contains(codec)) audioCodecs.add(codec);
-    }
-
-    // --- 关键逻辑：根据参数禁用 HEVC ---
-    if (disableHevc) {
-      videoCodecs.removeWhere((codec) => codec == 'hevc' || codec == 'h265');
-      videoProfiles.removeWhere(
-        (p) => p['Codec'] == 'hevc' || p['Codec'] == 'h265',
-      );
-    }
-
-    // 在 buildPlaybackInfoBody 中处理 h264 level
+    // --- 动态 Level + 手动开关结合逻辑 ---
     int rawLevel = _findMaxLevel(videoProfiles, "h264", 51);
+    int finalLevel;
+    if (disableHevc) {
+      // 开启兼容模式时，收紧 H264 Level 到 51 (1080P/4K 30fps)
+      finalLevel = 51;
+    } else {
+      // 正常模式，信任动态探测，上限设为 62 (8K 标准上限)
+      finalLevel = rawLevel > 62 ? 62 : rawLevel;
+    }
 
-    // 将 Level 限制在 52 (4K 60fps 级别)，确保服务器逻辑稳定
-    int safeLevel = rawLevel > 52 ? 52 : rawLevel;
-
-    // 3. 构建 Emby DeviceProfile
+    // 3. 构建 DeviceProfile (参考官方 2025 最新配置)
     return {
       "DeviceProfile": {
         "Name": result['DeviceName'] ?? "Android TV Player",
         "Id": result['DeviceId'] ?? "unique_id",
-        "MaxStreamingBitrate": maxStreamingBitrate,
         "MaxStaticBitrate": maxStreamingBitrate,
-        "MusicStreamingBitrate": 32000000,
+        "MaxStreamingBitrate": maxStreamingBitrate,
+        "MusicStreamingTranscodingBitrate": 192000,
+        "MaxStaticMusicBitrate": 320000,
 
-        // 直接播放配置：列出所有原生支持的格式
+        // 核心修复：音轨切换的关键。仿照官方设为 null，禁用盲目的 Direct Play
+        // 迫使服务器在切换音轨时提供支持 AudioStreamIndex 的串流链接
         "DirectPlayProfiles": [
           {
-            "Container": "mkv,mp4,mov,ts,m3u8,webm,avi,m2ts",
             "Type": "Video",
-            "VideoCodec": videoCodecs.join(','),
-            "AudioCodec": audioCodecs.join(','),
+            "VideoCodec": null,
+            "Container": null,
+            "AudioCodec": null
           },
-          {"Container": "mp3,flac,aac,m4a,opus,wav,dsf,dff", "Type": "Audio"},
+          {
+            "Type": "Audio",
+            "Container": null
+          }
         ],
 
-        // 核心优化：转码配置文件
-        // 关键点：VideoCodec 包含 h264 和 hevc。
-        // 当音频不兼容时，服务器会匹配此条目，发现视频是 hevc 且被允许，则仅转码音频，视频保持 Copy。
+        // 串流与转码：允许所有硬件支持的编码
         "TranscodingProfiles": [
           {
             "Container": "ts",
             "Type": "Video",
-            "AudioCodec": "aac,ac3", // 如果音频不兼容，优先转为兼容性最强的 AAC/AC3
-            "VideoCodec": disableHevc ? "h264" : "h264,hevc",
+            "AudioCodec": "ac3,aac,mp3,mp2,dts,dtshd,truehd",
+            "VideoCodec": disableHevc ? "h264" : "h264,hevc,av1",
             "Context": "Streaming",
             "Protocol": "hls",
+            "MaxAudioChannels": "8",
+            "MinSegments": "1",
+            "BreakOnNonKeyFrames": true,
+          },
+          {
+            "Container": "mkv",
+            "Type": "Video",
+            "AudioCodec": "aac,mp3,ac3,dts,flac,truehd",
+            "VideoCodec": disableHevc ? "h264" : "h264,hevc,av1",
+            "Context": "Static",
+            "MaxAudioChannels": "8"
           },
           {
             "Container": "mp3",
             "Type": "Audio",
             "AudioCodec": "mp3",
             "Context": "Streaming",
-            "Protocol": "http",
-          },
+            "Protocol": "http"
+          }
         ],
 
-        // 编码细化限制
         "CodecProfiles": [
-          // H.264 限制配置
+          // H.264 动态等级
           {
             "Type": "Video",
             "Codec": "h264",
@@ -191,37 +183,33 @@ Future<Map<String, dynamic>> buildPlaybackInfoBody({
               {
                 "Condition": "LessThanEqual",
                 "Property": "VideoLevel",
-                "Value": safeLevel.toString(),
-                "IsRequired": true,
+                "Value": finalLevel.toString(),
+                "IsRequired": false,
               },
             ],
           },
-          // HEVC 不限制配置：上报 Profile=Main10 会造成服务器判断错误 TranscodeReasons=VideoProfileNotSupported
-          if (!disableHevc &&
-              (videoCodecs.contains("hevc") || videoCodecs.contains("h265")))
-            {"Type": "Video", "Codec": "hevc", "Conditions": []},
-          // AV1 限制 (2025年趋势)
-          if (videoCodecs.contains("av1"))
+          // HEVC 动态配置
+          if (!disableHevc)
             {
               "Type": "Video",
-              "Codec": "av1",
+              "Codec": "hevc",
               "Conditions": [
                 {
-                  "Condition": "LessThanEqual",
-                  "Property": "Width",
-                  "Value": "3840", // 限制在 4K，防止 8K 视频压垮低端芯片
-                  "IsRequired": false,
-                },
-              ],
+                  "Condition": "EqualsAny",
+                  "Property": "VideoProfile",
+                  "Value": "Main|Main 10|Rext",
+                  "IsRequired": false
+                }
+              ]
             },
-          // 音频限制：防止因声道数过多触发视频转码
+          // 音频多声道支持
           {
             "Type": "Audio",
             "Conditions": [
               {
                 "Condition": "LessThanEqual",
                 "Property": "AudioChannels",
-                "Value": "8", // 允许 7.1 声道直接串流
+                "Value": "8",
                 "IsRequired": false,
               },
             ],
@@ -229,15 +217,18 @@ Future<Map<String, dynamic>> buildPlaybackInfoBody({
         ],
 
         "SubtitleProfiles": [
+          {"Format": "vtt", "Method": "Hls"},
           {"Format": "srt", "Method": "External"},
+          {"Format": "ass", "Method": "External"},
+          {"Format": "ssa", "Method": "External"},
           {"Format": "srt", "Method": "Embed"},
           {"Format": "ass", "Method": "Embed"},
           {"Format": "ssa", "Method": "Embed"},
-          {"Format": "pgs", "Method": "Embed"}, // 必须申明，否则蓝光原盘内置字幕会触发视频重编码
+          {"Format": "pgs", "Method": "Embed"},
           {"Format": "sub", "Method": "Embed"},
           {"Format": "dvdsub", "Method": "Embed"},
+          {"Format": "vtt", "Method": "Embed"}
         ],
-
         "MaxCanvasWidth": result['MaxCanvasWidth'] ?? 3840,
         "MaxCanvasHeight": result['MaxCanvasHeight'] ?? 2160,
       },
@@ -246,31 +237,25 @@ Future<Map<String, dynamic>> buildPlaybackInfoBody({
       "AutoOpenLiveStream": true,
       "MaxStreamingBitrate": maxStreamingBitrate,
       "EnableDirectPlay": true,
-      "EnableDirectStream": true, // 必须开启，这是实现“只转音频”的关键
+      "EnableDirectStream": true,
     };
   } catch (e) {
+    print("Build PlaybackInfo Error: $e");
     return {};
   }
 }
 
-// 找到 H264 的最高级别 (如 51, 52)
+// 辅助方法：动态获取硬件 Level
 int _findMaxLevel(List<dynamic> profiles, String codec, int defaultValue) {
   try {
-    final p = profiles.firstWhere((item) => item['Codec'] == codec);
-    return p['MaxLevel'];
-  } catch (_) {
-    return defaultValue;
-  }
-}
-
-// 确定 HEVC 是否支持 Main10 (HDR)
-String _findHevcProfile(List<dynamic> profiles) {
-  try {
     final p = profiles.firstWhere(
-      (item) => item['Codec'] == "hevc" || item['Codec'] == "h265",
+      (item) => item['Codec']?.toString().toLowerCase() == codec.toLowerCase(),
+      orElse: () => null,
     );
-    return p['Profile'] ?? "Main";
-  } catch (_) {
-    return "Main";
-  }
+    if (p != null && p['MaxLevel'] != null) {
+      if (p['MaxLevel'] is int) return p['MaxLevel'];
+      return int.parse(p['MaxLevel'].toString());
+    }
+  } catch (_) {}
+  return defaultValue;
 }
