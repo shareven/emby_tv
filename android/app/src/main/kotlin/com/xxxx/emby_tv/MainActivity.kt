@@ -96,6 +96,14 @@ class MainActivity : FlutterActivity() {
                         type.equals("audio/mpeg", ignoreCase = true) -> audioCodecs.add("mp3")
                         type.equals("audio/flac", ignoreCase = true) -> audioCodecs.add("flac")
                         type.equals("audio/opus", ignoreCase = true) -> audioCodecs.add("opus")
+                        type.equals("audio/vnd.dts", true) -> audioCodecs.add("dts")
+                        type.equals("audio/vnd.dts.hd", true) -> {
+                            audioCodecs.add("dts")
+                            audioCodecs.add("dtshd") // 蓝光原盘常见
+                        }
+                        type.equals("audio/true-hd", true) -> audioCodecs.add("truehd") // 杜比全景声原盘核心
+                        type.equals("audio/eac3-joc", true) -> audioCodecs.add("eac3") // 杜比数字+ (带全景声)
+                        type.equals("audio/ac4", true) -> audioCodecs.add("ac4")
                     }
                 } catch (e: Exception) {
                     // 预防部分老旧系统在探测特定 Codec 时崩溃

@@ -110,42 +110,74 @@ Future<Map<String, dynamic>> buildPlaybackInfoBody({
     List<String> audioCodecs = List<String>.from(result['AudioCodecs'] ?? []);
     final List<dynamic> videoProfiles = result['VideoProfiles'] ?? [];
 
+    // --- 音频优化：增加蓝光原盘常见高清音轨支持 ---
+    // 即使设备不支持自解，也要申明，以便在 DirectStream 模式下由客户端处理或 Downmix
+    final hdAudio = [
+      'ac3',
+      'eac3',
+      'dts',
+      'dtshd',
+      'truehd',
+      'aac',
+      'mp3',
+      'flac',
+    ];
+    for (var codec in hdAudio) {
+      if (!audioCodecs.contains(codec)) audioCodecs.add(codec);
+    }
+
     // --- 关键逻辑：根据参数禁用 HEVC ---
     if (disableHevc) {
       videoCodecs.removeWhere((codec) => codec == 'hevc' || codec == 'h265');
-      // 同时清理 Profile 列表中的 hevc 项
       videoProfiles.removeWhere(
         (p) => p['Codec'] == 'hevc' || p['Codec'] == 'h265',
       );
     }
 
+    // 在 buildPlaybackInfoBody 中处理 h264 level
+    int rawLevel = _findMaxLevel(videoProfiles, "h264", 51);
+
+    // 将 Level 限制在 52 (4K 60fps 级别)，确保服务器逻辑稳定
+    int safeLevel = rawLevel > 52 ? 52 : rawLevel;
+
     // 3. 构建 Emby DeviceProfile
     return {
       "DeviceProfile": {
+        "Name": result['DeviceName'] ?? "Android TV Player",
+        "Id": result['DeviceId'] ?? "unique_id",
         "MaxStreamingBitrate": maxStreamingBitrate,
         "MaxStaticBitrate": maxStreamingBitrate,
+        "MusicStreamingBitrate": 32000000,
 
-        // 直接播放配置
+        // 直接播放配置：列出所有原生支持的格式
         "DirectPlayProfiles": [
           {
-            "Container": "mkv,mp4,mov,ts,m3u8,webm,avi",
+            "Container": "mkv,mp4,mov,ts,m3u8,webm,avi,m2ts",
             "Type": "Video",
-            // 这里的 videoCodecs 已根据 disableHevc 进行了过滤
             "VideoCodec": videoCodecs.join(','),
             "AudioCodec": audioCodecs.join(','),
           },
-          {"Container": "mp3,flac,aac,m4a,opus", "Type": "Audio"},
+          {"Container": "mp3,flac,aac,m4a,opus,wav,dsf,dff", "Type": "Audio"},
         ],
 
-        // 转码配置：明确告诉服务器，如果不直解，优先转码为 H.264 (兼容性最强)
+        // 核心优化：转码配置文件
+        // 关键点：VideoCodec 包含 h264 和 hevc。
+        // 当音频不兼容时，服务器会匹配此条目，发现视频是 hevc 且被允许，则仅转码音频，视频保持 Copy。
         "TranscodingProfiles": [
           {
             "Container": "ts",
             "Type": "Video",
-            "AudioCodec": "aac,mp3",
-            "VideoCodec": "h264",
+            "AudioCodec": "aac,ac3", // 如果音频不兼容，优先转为兼容性最强的 AAC/AC3
+            "VideoCodec": disableHevc ? "h264" : "h264,hevc",
             "Context": "Streaming",
             "Protocol": "hls",
+          },
+          {
+            "Container": "mp3",
+            "Type": "Audio",
+            "AudioCodec": "mp3",
+            "Context": "Streaming",
+            "Protocol": "http",
           },
         ],
 
@@ -159,29 +191,41 @@ Future<Map<String, dynamic>> buildPlaybackInfoBody({
               {
                 "Condition": "LessThanEqual",
                 "Property": "VideoLevel",
-                "Value": _findMaxLevel(videoProfiles, "h264", 51).toString(),
+                "Value": safeLevel.toString(),
                 "IsRequired": true,
               },
             ],
           },
-          // HEVC 限制配置 (仅在未禁用时添加)
+          // HEVC 不限制配置：上报 Profile=Main10 会造成服务器判断错误 TranscodeReasons=VideoProfileNotSupported
           if (!disableHevc &&
               (videoCodecs.contains("hevc") || videoCodecs.contains("h265")))
+            {"Type": "Video", "Codec": "hevc", "Conditions": []},
+          // AV1 限制 (2025年趋势)
+          if (videoCodecs.contains("av1"))
             {
               "Type": "Video",
-              "Codec": "hevc",
+              "Codec": "av1",
               "Conditions": [
                 {
-                  "Condition": "Equals",
-                  "Property": "VideoProfile",
-                  "Value": _findHevcProfile(videoProfiles),
+                  "Condition": "LessThanEqual",
+                  "Property": "Width",
+                  "Value": "3840", // 限制在 4K，防止 8K 视频压垮低端芯片
                   "IsRequired": false,
                 },
               ],
             },
-          // AV1 限制 (2025年设备主流)
-          if (videoCodecs.contains("av1"))
-            {"Type": "Video", "Codec": "av1", "Conditions": []},
+          // 音频限制：防止因声道数过多触发视频转码
+          {
+            "Type": "Audio",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "AudioChannels",
+                "Value": "8", // 允许 7.1 声道直接串流
+                "IsRequired": false,
+              },
+            ],
+          },
         ],
 
         "SubtitleProfiles": [
@@ -189,18 +233,20 @@ Future<Map<String, dynamic>> buildPlaybackInfoBody({
           {"Format": "srt", "Method": "Embed"},
           {"Format": "ass", "Method": "Embed"},
           {"Format": "ssa", "Method": "Embed"},
-          {"Format": "pgs", "Method": "Embed"}, // 2025年高端设备可尝试支持 PGS
+          {"Format": "pgs", "Method": "Embed"}, // 必须申明，否则蓝光原盘内置字幕会触发视频重编码
+          {"Format": "sub", "Method": "Embed"},
+          {"Format": "dvdsub", "Method": "Embed"},
         ],
 
         "MaxCanvasWidth": result['MaxCanvasWidth'] ?? 3840,
         "MaxCanvasHeight": result['MaxCanvasHeight'] ?? 2160,
       },
-      
+
       "IsPlayback": true,
       "AutoOpenLiveStream": true,
       "MaxStreamingBitrate": maxStreamingBitrate,
       "EnableDirectPlay": true,
-      "EnableDirectStream": true,
+      "EnableDirectStream": true, // 必须开启，这是实现“只转音频”的关键
     };
   } catch (e) {
     return {};
