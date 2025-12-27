@@ -125,7 +125,7 @@ class AppLocalizations {
       'single_loop': '单集循环',
       'no_loop': '不循环',
       'direct_play': '直接播放',
-      'directStream': '直接流处理',
+      'directStream': '直接串流',
       'transcode': '转码',
       'hardware_acceleration': '硬件加速',
       'stereo': '立体声',

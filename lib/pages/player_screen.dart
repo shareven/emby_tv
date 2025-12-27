@@ -603,73 +603,72 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   String _streamModeLine() {
-    final source = _currentMediaSource;
-    final sess = _session;
-    if (source == null) return '';
+  final source = _currentMediaSource;
+  final sess = _session;
+  if (source == null) return '';
 
-    final local = AppLocalizations.of(context)!;
+  final local = AppLocalizations.of(context)!;
+  final ti = sess?['TranscodingInfo'] ?? sess?['Transcoding'];
 
-    // 1. 获取核心播放方法
-    String? playMethod = sess?['PlayMethod']?.toString();
-    if (playMethod == null) {
-      if (source['SupportsDirectPlay'] == true)
-        playMethod = 'DirectPlay';
-      else if (source['SupportsDirectStream'] == true)
-        playMethod = 'DirectStream';
-      else
-        playMethod = 'Transcode';
-    }
-
-    // 2. 处理直接播放和直接流处理
-    if (playMethod == 'DirectPlay') return local.directPlay;
-    if (playMethod == 'DirectStream') return local.directStream;
-
-    // 3. 处理转码逻辑 (PlayMethod == 'Transcode')
-    List<dynamic> reasons = [];
-    bool isHardwareUpscale = false; // 是否为硬件加速
-
-    try {
-      final ti = sess?['TranscodingInfo'];
-      if (ti is Map) {
-        // 获取转码原因
-        final r = ti['TranscodeReasons'];
-        if (r is List) reasons = r;
-
-        // 判断硬件加速状态
-        // 在 Emby API 中，IsVideoDirect 为 true 通常表示视频流是通过硬件直接处理的
-        // 或者检查是否存在具体的硬件加速类型 (如 vaapi, nvenc, qsv, mediacodec)
-        isHardwareUpscale =
-            ti['IsVideoDirect'] == true ||
-            ti['HardwareAccelerationType'] != null;
-      }
-
-      if (reasons.isEmpty) {
-        final r = source['TranscodeReasons'];
-        if (r is List) reasons = r;
-      }
-    } catch (_) {}
-
-    // 4. 构建显示文本
-    // 如果是硬件加速，显示 "转码 (硬件) " 或 "⚡ 转码"
-    String baseStatus = isHardwareUpscale
-        ? '${local.transcode} (${local.hardwareAcceleration})'
-        : local.transcode;
-
-    if (reasons.isEmpty) return baseStatus;
-
-    // 5. 转换具体原因
-    final localizedReasons = reasons
-        .map((e) {
-          final key = e?.toString() ?? '';
-          return local.transcodeReason(key);
-        })
-        .where((s) => s.isNotEmpty)
-        .toList();
-
-    if (localizedReasons.isEmpty) return baseStatus;
-
-    return '$baseStatus (${localizedReasons.join(', ')})';
+  // 1. 获取播放方法
+  String? playMethod = sess?['PlayMethod']?.toString();
+  if (playMethod == null) {
+    final transcodingUrl = source["TranscodingUrl"];
+    playMethod = (transcodingUrl == null || transcodingUrl.toString().isEmpty)
+        ? 'DirectPlay'
+        : 'Transcode';
   }
+
+  // 2. 识别视频是否为直接拷贝 (无损)
+  bool isVideoDirect = ti is Map && ti['IsVideoDirect'] == true;
+  bool isDirectStream = playMethod == 'DirectStream' || isVideoDirect;
+
+  // 3. 处理纯粹的“直接播放” (无任何修改)
+  if (playMethod == 'DirectPlay') return local.directPlay;
+
+  // 4. 获取转码/重封装原因
+  List<dynamic> reasons = [];
+  if (ti is Map) {
+    reasons = ti['TranscodeReasons'] ?? [];
+  }
+  if (reasons.isEmpty && source['TranscodeReasons'] is List) {
+    reasons = source['TranscodeReasons'];
+  }
+
+  // 格式化原因文本
+  final localizedReasons = reasons
+      .map((e) => local.transcodeReason(e?.toString() ?? ''))
+      .where((s) => s.isNotEmpty)
+      .toList();
+  String reasonTag = localizedReasons.isNotEmpty ? ' (${localizedReasons.join(', ')})' : '';
+
+  // 5. 分情况构建显示文本
+  
+  // 情况 A: 直接串流 (视频无损，容器或音频变了)
+  if (isDirectStream) {
+    String? container = ti?['Container']?.toString().toUpperCase();
+    String? subProtocol = ti?['SubProtocol']?.toString().toUpperCase();
+    
+    List<String> infoParts = [];
+    if (subProtocol != null && subProtocol.isNotEmpty) infoParts.add(subProtocol);
+    if (container != null && container.isNotEmpty) infoParts.add(container);
+    
+    String techInfo = infoParts.isNotEmpty ? ' → [${infoParts.join(' - ')}]' : '';
+    
+    // 返回示例：“直接串流 [HLS - MP4] (不支持的音频)”
+    return '${local.directStream} $techInfo$reasonTag';
+  }
+
+  // 情况 B: 真正的视频转码 (视频有损重编码)
+  bool isHardware = false;
+  if (ti is Map) {
+    isHardware = ti['IsVideoHardwareAcceleration'] == true || ti['HardwareAccelerationType'] != null;
+  }
+
+  String hardwareTag = isHardware ? '⚡' : '';
+  // 返回示例：“转码⚡ (视频码率超过限制)”
+  return '${local.transcode}$hardwareTag$reasonTag';
+}
 
   String _videoMainLine() {
     final video = _currentVideoStream;
@@ -768,7 +767,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     final local = AppLocalizations.of(context)!;
 
-    // 1. 获取播放方法
+    // 1. 获取转码详情数据
+    // Emby 的 API 中，转码详情可能存储在 TranscodingInfo 或 Transcoding 字段中
+    final ti = sess?['TranscodingInfo'] ?? sess?['Transcoding'];
+
+    // 2. 获取播放方法 (PlayMethod)
+    // 这里的 playMethod 可能为: DirectPlay(直放), DirectStream(重封装), Transcode(转码)
     String? playMethod = sess?['PlayMethod']?.toString();
     if (playMethod == null) {
       final transcodingUrl = source["TranscodingUrl"];
@@ -777,37 +781,47 @@ class _PlayerScreenState extends State<PlayerScreen> {
           : 'Transcode';
     }
 
-    // 2. 核心逻辑优化：
-    // 在 Emby 中，DirectStream 意味着视频流被原样提取（Copy），只有容器或音频在变。
-    // 所以从“视频无损”的角度，它等同于 DirectPlay。
-    if (playMethod == 'DirectPlay' || playMethod == 'DirectStream') {
+    // 3. 核心判断逻辑：视频是否为直接拷贝 (Video Copy/Direct)
+    // 在 Emby 中，IsVideoDirect 为 true 意味着视频流没有经过重编码，即使音频在转码。
+    bool isVideoDirect = false;
+    if (ti is Map) {
+      isVideoDirect = ti['IsVideoDirect'] == true;
+    }
+
+    // 4. 对齐官方逻辑：
+    // 只要满足以下任一条件，就向用户显示为“直接播放”：
+    // - 原生直放 (DirectPlay)
+    // - 视频流直接拷贝的重封装 (DirectStream)
+    // - 转码模式下，视频流实际上是 Direct 的 (isVideoDirect)
+    if (playMethod == 'DirectPlay' ||
+        playMethod == 'DirectStream' ||
+        isVideoDirect) {
       return local.directPlay;
     }
 
-    // 3. 处理转码情况 (PlayMethod == 'Transcode')
-    final ti = sess?['TranscodingInfo'] ?? sess?['Transcoding'];
+    // 5. 只有视频流被真正重编码时，才进入转码逻辑展示
     bool isHardware = false;
     String vCodec = "";
     int? bitrate;
 
     if (ti is Map) {
-      // 即使 IsVideoDirect 为 true（硬件加速），视频也被重编码了，所以属于转码。
-      isHardware = ti['IsVideoDirect'] == true;
+      // 检查是否使用了硬件加速 (例如 VAAPI, NVENC, QuickSync)
+      // 官方字段通常为 IsVideoHardwareAcceleration 或在描述中包含加速字样
+      isHardware = ti['IsVideoHardwareAcceleration'] == true;
+
+      // 获取转码后的目标编码
       vCodec = (ti['VideoCodec'] ?? ti['Codec'] ?? '').toString().toUpperCase();
+
+      // 获取当前转码流的实时码率
       bitrate = _asInt(
         ti['VideoBitrate'] ?? ti['Bitrate'] ?? ti['TranscodingBitrate'],
       );
     }
 
-    // 额外校验：如果转码信息中明确视频是“直接串流”，则再次强制返回直接播放
-    // 这是一层保险，防止某些版本 Emby API 将 Remux 标记为 Transcode 却带了 IsVideoDirect
-    if (isHardware && playMethod == 'DirectStream') {
-      return local.directPlay;
-    }
-
-    // 4. 格式化转码显示
+    // 6. 格式化转码显示信息
     final mbps = _formatMbpsFromBps(bitrate);
-    String hardwareTag = isHardware ? '⚡' : ''; // 标记是否为服务器硬件转码
+    // 只有真正重编码且开启了硬件加速，才显示闪电图标
+    String hardwareTag = isHardware ? '⚡' : '';
 
     String codecInfo = [
       vCodec,
@@ -815,7 +829,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       mbps,
     ].where((e) => e.isNotEmpty).join(' ').trim();
 
+    // 如果没有具体转码信息，返回通用的“转码”文本
     if (codecInfo.isEmpty) return local.transcode;
+
+    // 返回例如：“转码 (HEVC ⚡ 7.2 Mbps)”
     return '${local.transcode} ($codecInfo)';
   }
 
@@ -2038,7 +2055,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         child: const Center(child: CircularProgressIndicator()),
                       ),
                     ),
-                  if (!_isLoading && (!_isShowInfo || !_isPlaying))
+                  if (!_isLoading && (_isShowInfo || !_isPlaying))
                     Positioned(
                       top: 0,
                       left: 0,

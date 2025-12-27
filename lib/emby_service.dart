@@ -134,9 +134,9 @@ class EmbyService {
     bool disableHevc = false,
   }) async {
     final body = await buildPlaybackInfoBody(disableHevc: disableHevc);
-    print(body.toString());
+   
     final response = await http(
-      '/Items/$mediaId/PlaybackInfo?UserId=$userId&StartTimeTicks=$startTimeTicks&IsPlayback=true&AutoOpenLiveStream=true&MaxStreamingBitrate=60000000&X-Emby-Token=$_apiKey&X-Emby-Language=zh-cn&reqformat=json',
+      '/Items/$mediaId/PlaybackInfo?UserId=$userId&StartTimeTicks=$startTimeTicks&IsPlayback=true&AutoOpenLiveStream=true&MaxStreamingBitrate=200000000&X-Emby-Token=$_apiKey&X-Emby-Language=zh-cn&reqformat=json',
       method: "POST",
       body: body,
     );

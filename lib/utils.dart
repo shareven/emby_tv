@@ -94,11 +94,10 @@ const MethodChannel _deviceCapabilitiesChannel = MethodChannel(
 
 Future<Map<String, dynamic>> buildPlaybackInfoBody({
   bool disableHevc = false,
-  // 修正为 200Mbps，符合 2025 年 4K/8K 蓝光原盘标准
-  int maxStreamingBitrate = 200000000, 
+  int maxStreamingBitrate = 200000000,
 }) async {
   try {
-    // 1. 获取硬件能力
+    // 1. 获取硬件探测能力
     final result = await _deviceCapabilitiesChannel
         .invokeMethod<Map<dynamic, dynamic>>('getCapabilities');
 
@@ -106,146 +105,251 @@ Future<Map<String, dynamic>> buildPlaybackInfoBody({
 
     // 2. 提取数据并转为可变列表 (处理 Unsupported operation 报错)
     List<String> videoCodecs = List<String>.from(result['VideoCodecs'] ?? []);
-    final List<dynamic> videoProfiles = List<dynamic>.from(result['VideoProfiles'] ?? []);
+    List<String> audioCodecs = List<String>.from(result['AudioCodecs'] ?? []);
+    final List<dynamic> videoProfiles = List<dynamic>.from(
+      result['VideoProfiles'] ?? [],
+    );
 
-    // --- 动态 Level + 手动开关结合逻辑 ---
+    // --- 动态 Level 处理 ---
     int rawLevel = _findMaxLevel(videoProfiles, "h264", 51);
-    int finalLevel;
-    if (disableHevc) {
-      // 开启兼容模式时，收紧 H264 Level 到 51 (1080P/4K 30fps)
-      finalLevel = 51;
-    } else {
-      // 正常模式，信任动态探测，上限设为 62 (8K 标准上限)
-      finalLevel = rawLevel > 62 ? 62 : rawLevel;
-    }
+    int finalLevel = disableHevc ? 51 : (rawLevel > 62 ? 62 : rawLevel);
 
-    // 3. 构建 DeviceProfile (参考官方 2025 最新配置)
+    // 动态构建支持字符串
+    String supportedVideo = videoCodecs.join(',');
+    String supportedAudio = audioCodecs.join(',');
     return {
       "DeviceProfile": {
-        "Name": result['DeviceName'] ?? "Android TV Player",
-        "Id": result['DeviceId'] ?? "unique_id",
-        "MaxStaticBitrate": maxStreamingBitrate,
-        "MaxStreamingBitrate": maxStreamingBitrate,
+        "MaxStaticBitrate": 200000000,
+        "MaxStreamingBitrate": 200000000,
         "MusicStreamingTranscodingBitrate": 192000,
-        "MaxStaticMusicBitrate": 320000,
-
-        // 核心修复：音轨切换的关键。仿照官方设为 null，禁用盲目的 Direct Play
-        // 迫使服务器在切换音轨时提供支持 AudioStreamIndex 的串流链接
+        "MaxCanvasWidth": result['MaxCanvasWidth'] ?? 3840,
+        "MaxCanvasHeight": result['MaxCanvasHeight'] ?? 2160,
         "DirectPlayProfiles": [
           {
             "Type": "Video",
-            "VideoCodec": null,
-            "Container": null,
-            "AudioCodec": null
+            "VideoCodec": disableHevc ? "h264" : supportedVideo,
+            "Container": "mp4,m4v,mkv,mov",
+            "AudioCodec": supportedAudio,
           },
-          {
-            "Type": "Audio",
-            "Container": null
-          }
+          {"Type": "Audio", "Container": null, "AudioCodec": null},
         ],
-
-        // 串流与转码：允许所有硬件支持的编码
         "TranscodingProfiles": [
           {
-            "Container": "ts",
-            "Type": "Video",
-            "AudioCodec": "ac3,aac,mp3,mp2,dts,dtshd,truehd",
-            "VideoCodec": disableHevc ? "h264" : "h264,hevc,av1",
+            "Container": "aac",
+            "Type": "Audio",
+            "AudioCodec": "aac",
             "Context": "Streaming",
             "Protocol": "hls",
             "MaxAudioChannels": "8",
             "MinSegments": "1",
-            "BreakOnNonKeyFrames": true,
+            "BreakOnNonKeyFrames": false,
           },
           {
-            "Container": "mkv",
-            "Type": "Video",
-            "AudioCodec": "aac,mp3,ac3,dts,flac,truehd",
-            "VideoCodec": disableHevc ? "h264" : "h264,hevc,av1",
-            "Context": "Static",
-            "MaxAudioChannels": "8"
+            "Container": "aac",
+            "Type": "Audio",
+            "AudioCodec": "aac",
+            "Context": "Streaming",
+            "Protocol": "http",
+            "MaxAudioChannels": "8",
           },
           {
             "Container": "mp3",
             "Type": "Audio",
             "AudioCodec": "mp3",
             "Context": "Streaming",
-            "Protocol": "http"
-          }
+            "Protocol": "http",
+            "MaxAudioChannels": "8",
+          },
+          {
+            "Container": "opus",
+            "Type": "Audio",
+            "AudioCodec": "opus",
+            "Context": "Streaming",
+            "Protocol": "http",
+            "MaxAudioChannels": "8",
+          },
+          {
+            "Container": "wav",
+            "Type": "Audio",
+            "AudioCodec": "wav",
+            "Context": "Streaming",
+            "Protocol": "http",
+            "MaxAudioChannels": "8",
+          },
+          {
+            "Container": "opus",
+            "Type": "Audio",
+            "AudioCodec": "opus",
+            "Context": "Static",
+            "Protocol": "http",
+            "MaxAudioChannels": "8",
+          },
+          {
+            "Container": "mp3",
+            "Type": "Audio",
+            "AudioCodec": "mp3",
+            "Context": "Static",
+            "Protocol": "http",
+            "MaxAudioChannels": "8",
+          },
+          {
+            "Container": "aac",
+            "Type": "Audio",
+            "AudioCodec": "aac",
+            "Context": "Static",
+            "Protocol": "http",
+            "MaxAudioChannels": "8",
+          },
+          {
+            "Container": "wav",
+            "Type": "Audio",
+            "AudioCodec": "wav",
+            "Context": "Static",
+            "Protocol": "http",
+            "MaxAudioChannels": "8",
+          },
+          {
+            "Container": "mkv",
+            "Type": "Video",
+            "AudioCodec": "mp3,aac,opus,flac,vorbis",
+            "VideoCodec": "h264,hevc,av1,vp8,vp9",
+            "Context": "Static",
+            "MaxAudioChannels": "8",
+            "CopyTimestamps": true,
+          },
+          {
+            "Container": "ts",
+            "Type": "Video",
+            "AudioCodec": "mp3,aac",
+            "VideoCodec": "hevc,h264,av1",
+            "Context": "Streaming",
+            "Protocol": "hls",
+            "MaxAudioChannels": "8",
+            "MinSegments": "1",
+            "BreakOnNonKeyFrames": false,
+            "ManifestSubtitles": "vtt",
+          },
+          {
+            "Container": "webm",
+            "Type": "Video",
+            "AudioCodec": "vorbis",
+            "VideoCodec": "vpx",
+            "Context": "Streaming",
+            "Protocol": "http",
+            "MaxAudioChannels": "8",
+          },
+          {
+            "Container": "mp4",
+            "Type": "Video",
+            "AudioCodec": "mp3,aac,opus,flac,vorbis",
+            "VideoCodec": "h264",
+            "Context": "Static",
+            "Protocol": "http",
+          },
         ],
-
+        "ContainerProfiles": [],
         "CodecProfiles": [
-          // H.264 动态等级
+          {
+            "Type": "VideoAudio",
+            "Codec": "aac",
+            "Conditions": [
+              {
+                "Condition": "Equals",
+                "Property": "IsSecondaryAudio",
+                "Value": "false",
+                "IsRequired": "false",
+              },
+            ],
+          },
+          {
+            "Type": "VideoAudio",
+            "Codec": "flac",
+            "Conditions": [
+              {
+                "Condition": "Equals",
+                "Property": "IsSecondaryAudio",
+                "Value": "false",
+                "IsRequired": "false",
+              },
+            ],
+          },
+          {
+            "Type": "VideoAudio",
+            "Codec": "vorbis",
+            "Conditions": [
+              {
+                "Condition": "Equals",
+                "Property": "IsSecondaryAudio",
+                "Value": "false",
+                "IsRequired": "false",
+              },
+            ],
+          },
+          {
+            "Type": "VideoAudio",
+            "Conditions": [
+              {
+                "Condition": "Equals",
+                "Property": "IsSecondaryAudio",
+                "Value": "false",
+                "IsRequired": "false",
+              },
+            ],
+          },
           {
             "Type": "Video",
             "Codec": "h264",
             "Conditions": [
               {
+                "Condition": "EqualsAny",
+                "Property": "VideoProfile",
+                "Value": "high|main|baseline|constrained baseline|high 10",
+                "IsRequired": false,
+              },
+              {
                 "Condition": "LessThanEqual",
                 "Property": "VideoLevel",
-                "Value": finalLevel.toString(),
+                "Value": finalLevel,
                 "IsRequired": false,
               },
             ],
           },
           // HEVC 动态配置
-          if (!disableHevc)
+          if (!disableHevc &&
+              (videoCodecs.contains("hevc") || videoCodecs.contains("h265")))
             {
               "Type": "Video",
               "Codec": "hevc",
               "Conditions": [
                 {
                   "Condition": "EqualsAny",
-                  "Property": "VideoProfile",
-                  "Value": "Main|Main 10|Rext",
-                  "IsRequired": false
-                }
-              ]
+                  "Property": "VideoCodecTag",
+                  "Value": "hvc1|hev1|hevc|hdmv",
+                  "IsRequired": false,
+                },
+              ],
             },
-          // 音频多声道支持
-          {
-            "Type": "Audio",
-            "Conditions": [
-              {
-                "Condition": "LessThanEqual",
-                "Property": "AudioChannels",
-                "Value": "8",
-                "IsRequired": false,
-              },
-            ],
-          },
         ],
-
         "SubtitleProfiles": [
           {"Format": "vtt", "Method": "Hls"},
-          {"Format": "srt", "Method": "External"},
+          {"Format": "eia_608", "Method": "VideoSideData", "Protocol": "hls"},
+          {"Format": "eia_708", "Method": "VideoSideData", "Protocol": "hls"},
+          {"Format": "vtt", "Method": "External"},
           {"Format": "ass", "Method": "External"},
           {"Format": "ssa", "Method": "External"},
-          {"Format": "srt", "Method": "Embed"},
-          {"Format": "ass", "Method": "Embed"},
-          {"Format": "ssa", "Method": "Embed"},
-          {"Format": "pgs", "Method": "Embed"},
-          {"Format": "sub", "Method": "Embed"},
-          {"Format": "dvdsub", "Method": "Embed"},
-          {"Format": "vtt", "Method": "Embed"}
         ],
-        "MaxCanvasWidth": result['MaxCanvasWidth'] ?? 3840,
-        "MaxCanvasHeight": result['MaxCanvasHeight'] ?? 2160,
+        "ResponseProfiles": [
+          {"Type": "Video", "Container": "m4v", "MimeType": "video/mp4"},
+        ],
       },
-
-      "IsPlayback": true,
-      "AutoOpenLiveStream": true,
-      "MaxStreamingBitrate": maxStreamingBitrate,
-      "EnableDirectPlay": true,
-      "EnableDirectStream": true,
     };
-  } catch (e) {
+    } catch (e) {
     print("Build PlaybackInfo Error: $e");
     return {};
   }
 }
 
-// 辅助方法：动态获取硬件 Level
+// 辅助方法保持不变
 int _findMaxLevel(List<dynamic> profiles, String codec, int defaultValue) {
   try {
     final p = profiles.firstWhere(
