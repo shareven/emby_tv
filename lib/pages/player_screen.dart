@@ -603,72 +603,79 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   String _streamModeLine() {
-  final source = _currentMediaSource;
-  final sess = _session;
-  if (source == null) return '';
+    final source = _currentMediaSource;
+    final sess = _session;
+    if (source == null || sess == null) return '';
 
-  final local = AppLocalizations.of(context)!;
-  final ti = sess?['TranscodingInfo'] ?? sess?['Transcoding'];
+    final local = AppLocalizations.of(context)!;
+    final ti = sess?['TranscodingInfo'] ?? sess?['Transcoding'];
 
-  // 1. 获取播放方法
-  String? playMethod = sess?['PlayMethod']?.toString();
-  if (playMethod == null) {
-    final transcodingUrl = source["TranscodingUrl"];
-    playMethod = (transcodingUrl == null || transcodingUrl.toString().isEmpty)
-        ? 'DirectPlay'
-        : 'Transcode';
+    // 1. 获取播放方法
+    String? playMethod = sess?['PlayMethod']?.toString();
+    if (playMethod == null) {
+      final transcodingUrl = source["TranscodingUrl"];
+      playMethod = (transcodingUrl == null || transcodingUrl.toString().isEmpty)
+          ? 'DirectPlay'
+          : 'Transcode';
+    }
+
+    // 2. 识别视频是否为直接拷贝 (无损)
+    bool isVideoDirect = ti is Map && ti['IsVideoDirect'] == true;
+    bool isDirectStream = playMethod == 'DirectStream' || isVideoDirect;
+
+    // 3. 处理纯粹的“直接播放” (无任何修改)
+    if (playMethod == 'DirectPlay') return local.directPlay;
+
+    // 4. 获取转码/重封装原因
+    List<dynamic> reasons = [];
+    if (ti is Map) {
+      reasons = ti['TranscodeReasons'] ?? [];
+    }
+    if (reasons.isEmpty && source['TranscodeReasons'] is List) {
+      reasons = source['TranscodeReasons'];
+    }
+
+    // 格式化原因文本
+    final localizedReasons = reasons
+        .map((e) => local.transcodeReason(e?.toString() ?? ''))
+        .where((s) => s.isNotEmpty)
+        .toList();
+    String reasonTag = localizedReasons.isNotEmpty
+        ? ' (${localizedReasons.join(', ')})'
+        : '';
+
+    // 5. 分情况构建显示文本
+
+    // 情况 A: 直接串流 (视频无损，容器或音频变了)
+    if (isDirectStream) {
+      String? container = ti?['Container']?.toString().toUpperCase();
+      String? subProtocol = ti?['SubProtocol']?.toString().toUpperCase();
+
+      List<String> infoParts = [];
+      if (subProtocol != null && subProtocol.isNotEmpty)
+        infoParts.add(subProtocol);
+      if (container != null && container.isNotEmpty) infoParts.add(container);
+
+      String techInfo = infoParts.isNotEmpty
+          ? ' → [${infoParts.join(' - ')}]'
+          : '';
+
+      // 返回示例：“直接串流 [HLS - MP4] (不支持的音频)”
+      return '${local.directStream} $techInfo$reasonTag';
+    }
+
+    // 情况 B: 真正的视频转码 (视频有损重编码)
+    bool isHardware = false;
+    if (ti is Map) {
+      isHardware =
+          ti['IsVideoHardwareAcceleration'] == true ||
+          ti['HardwareAccelerationType'] != null;
+    }
+
+    String hardwareTag = isHardware ? '⚡' : '';
+    // 返回示例：“转码⚡ (视频码率超过限制)”
+    return '${local.transcode}$hardwareTag$reasonTag';
   }
-
-  // 2. 识别视频是否为直接拷贝 (无损)
-  bool isVideoDirect = ti is Map && ti['IsVideoDirect'] == true;
-  bool isDirectStream = playMethod == 'DirectStream' || isVideoDirect;
-
-  // 3. 处理纯粹的“直接播放” (无任何修改)
-  if (playMethod == 'DirectPlay') return local.directPlay;
-
-  // 4. 获取转码/重封装原因
-  List<dynamic> reasons = [];
-  if (ti is Map) {
-    reasons = ti['TranscodeReasons'] ?? [];
-  }
-  if (reasons.isEmpty && source['TranscodeReasons'] is List) {
-    reasons = source['TranscodeReasons'];
-  }
-
-  // 格式化原因文本
-  final localizedReasons = reasons
-      .map((e) => local.transcodeReason(e?.toString() ?? ''))
-      .where((s) => s.isNotEmpty)
-      .toList();
-  String reasonTag = localizedReasons.isNotEmpty ? ' (${localizedReasons.join(', ')})' : '';
-
-  // 5. 分情况构建显示文本
-  
-  // 情况 A: 直接串流 (视频无损，容器或音频变了)
-  if (isDirectStream) {
-    String? container = ti?['Container']?.toString().toUpperCase();
-    String? subProtocol = ti?['SubProtocol']?.toString().toUpperCase();
-    
-    List<String> infoParts = [];
-    if (subProtocol != null && subProtocol.isNotEmpty) infoParts.add(subProtocol);
-    if (container != null && container.isNotEmpty) infoParts.add(container);
-    
-    String techInfo = infoParts.isNotEmpty ? ' → [${infoParts.join(' - ')}]' : '';
-    
-    // 返回示例：“直接串流 [HLS - MP4] (不支持的音频)”
-    return '${local.directStream} $techInfo$reasonTag';
-  }
-
-  // 情况 B: 真正的视频转码 (视频有损重编码)
-  bool isHardware = false;
-  if (ti is Map) {
-    isHardware = ti['IsVideoHardwareAcceleration'] == true || ti['HardwareAccelerationType'] != null;
-  }
-
-  String hardwareTag = isHardware ? '⚡' : '';
-  // 返回示例：“转码⚡ (视频码率超过限制)”
-  return '${local.transcode}$hardwareTag$reasonTag';
-}
 
   String _videoMainLine() {
     final video = _currentVideoStream;
@@ -763,7 +770,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String _videoModeLine() {
     final source = _currentMediaSource;
     final sess = _session;
-    if (source == null) return '';
+    if (source == null || sess == null) return '';
 
     final local = AppLocalizations.of(context)!;
 
@@ -929,7 +936,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String _audioModeLine() {
     final source = _currentMediaSource;
     final sess = _session;
-    if (source == null) return '';
+    if (source == null || sess == null) return '';
 
     final local = AppLocalizations.of(context)!;
 
@@ -1274,129 +1281,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  Widget _buildEpisodesListForSidWidget(String sid, List items) {
-    final currentItemId = _media['MediaSources']?[0]?['ItemId']?.toString();
-    final currentIndex = items.indexWhere(
-      (e) => e is Map && e['Id']?.toString() == currentItemId,
-    );
-    final focusIndex = currentIndex >= 0 ? currentIndex : 0;
-
-    // ensure scroll controller exists
-    _seriesScrollControllers[sid] ??= ScrollController();
-
-    // ensure focus nodes exist
-    final nodes = _seriesFocusNodes[sid] ??= List<FocusNode>.generate(
-      items.length,
-      (_) => FocusNode(),
-    );
-    if (nodes.length < items.length) {
-      nodes.addAll(
-        List.generate(items.length - nodes.length, (_) => FocusNode()),
-      );
-    }
-
-    // after frame, request focus and scroll to item (horizontal)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      try {
-        final controller = _seriesScrollControllers[sid]!;
-        // approximate item width
-        final itemExtent = 180.0;
-        final max = controller.hasClients
-            ? controller.position.maxScrollExtent
-            : 0.0;
-        final offset = (focusIndex * itemExtent).clamp(0.0, max);
-        if (controller.hasClients) controller.jumpTo(offset);
-        nodes[focusIndex].requestFocus();
-      } catch (_) {}
-    });
-    double height = 290;
-    List aspectRatios = items
-        .map((e) => (e["PrimaryImageAspectRatio"] ?? 1).toDouble())
-        .toList();
-    double maxAspectRatio = aspectRatios.isEmpty
-        ? 1
-        : aspectRatios.reduce(
-            (currMax, ratio) => ratio > currMax ? ratio : currMax,
-          );
-    double width = maxAspectRatio * height - (maxAspectRatio > 1 ? 220 : 90);
-
-    return SingleChildScrollView(
-      child: SizedBox(
-        height: height,
-        child: ListView.separated(
-          controller: _seriesScrollControllers[sid],
-          scrollDirection: Axis.horizontal,
-          itemCount: items.length,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          separatorBuilder: (_, _) => const SizedBox(width: 12),
-          itemBuilder: (context, index) {
-            final it = items[index];
-            if (it is! Map) return const SizedBox.shrink();
-            final node = _seriesFocusNodes[sid]![index];
-            final ticks = it['UserData']?['PlaybackPositionTicks'] ?? 0;
-            final isCurrent =
-                it['Id']?.toString() ==
-                _media['MediaSources']?[0]?['ItemId']?.toString();
-            return Focus(
-              focusNode: node,
-              onKeyEvent: (node, event) {
-                if (!isCurrent && event is KeyDownEvent) {
-                  final key = event.logicalKey;
-                  if (key == LogicalKeyboardKey.accept ||
-                      key == LogicalKeyboardKey.select ||
-                      key == LogicalKeyboardKey.enter) {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(
-                        builder: (context) => PlayerScreen(
-                          mediaId: it['Id']?.toString() ?? '',
-                          isSeries: (it['Type'] ?? '') == 'Series',
-                          playbackPositionTicks: ticks is int ? ticks : 0,
-                        ),
-                      ),
-                    );
-                    return KeyEventResult.handled;
-                  }
-                }
-                return KeyEventResult.ignored;
-              },
-              child: Builder(
-                builder: (context) {
-                  final isFocused = Focus.of(context).hasFocus;
-
-                  return SizedBox(
-                    width: width,
-                    child: Stack(
-                      children: [
-                        if (isCurrent)
-                          Positioned.fill(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(color: Colors.white24),
-                            ),
-                          ),
-                        BuildItem(
-                          item: it,
-                          width: width,
-                          isContinueWatching: false,
-                          isMyLibrary: false,
-                          isFocused: isFocused,
-                          isShowOverview: true,
-                          imageBoxFit: BoxFit.fitHeight,
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
   void _showAlert(BuildContext context) {
     int selectedTab = 0;
     final i10n = AppLocalizations.of(context)!;
@@ -1420,13 +1304,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
             Widget buildTab(String label, int index) {
               final bool isSelected = selectedTab == index;
+              
               return Focus(
-                autofocus: isSelected,
+                autofocus: index == 0,
+                
                 onFocusChange: (hasFocus) {
-                  if (hasFocus) {
-                    setStateDialog(() {
-                      selectedTab = index;
-                    });
+                  // 只有在获得焦点且索引改变时才 setState，减少刷新次数
+                  if (hasFocus && selectedTab != index) {
+                    setStateDialog(() => selectedTab = index);
                   }
                 },
                 child: GestureDetector(
@@ -1451,6 +1336,187 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                   ),
                 ),
+              );
+            }
+
+            Widget buildEpisodesListForSidWidget(String sid, List items) {
+              final currentItemId = _media['MediaSources']?[0]?['ItemId']
+                  ?.toString();
+              final currentIndex = items.indexWhere(
+                (e) => e is Map && e['Id']?.toString() == currentItemId,
+              );
+              final focusIndex = currentIndex >= 0 ? currentIndex : 0;
+
+              // ensure scroll controller exists
+              _seriesScrollControllers[sid] ??= ScrollController();
+
+              // ensure focus nodes exist
+              final nodes = _seriesFocusNodes[sid] ??= List<FocusNode>.generate(
+                items.length,
+                (_) => FocusNode(),
+              );
+              if (nodes.length < items.length) {
+                nodes.addAll(
+                  List.generate(
+                    items.length - nodes.length,
+                    (_) => FocusNode(),
+                  ),
+                );
+              }
+
+              double height = 290;
+              List aspectRatios = items
+                  .map((e) => (e["PrimaryImageAspectRatio"] ?? 1).toDouble())
+                  .toList();
+              double maxAspectRatio = aspectRatios.isEmpty
+                  ? 1
+                  : aspectRatios.reduce(
+                      (currMax, ratio) => ratio > currMax ? ratio : currMax,
+                    );
+              double width =
+                  maxAspectRatio * height - (maxAspectRatio > 1 ? 220 : 90);
+
+              // 解决了“虚拟化加载”导致的焦点丢失（核心原因）
+              // ListView 是虚拟化的，它只会渲染当前屏幕可见范围内的 Widget。
+              // 修改前：如果你当前播放的是第 20 集，而屏幕只显示前 5 集，那么第 20 集的 Focus 按钮在内存里根本不存在。当你按下键试图寻找焦点时，系统找不到对应的 FocusNode，于是只能“回弹”到最近的有效焦点（也就是顶部的 Tab）。
+              // 修改后：你在 addPostFrameCallback 中使用了 controller.jumpTo(targetOffset)。这确保了在列表渲染完成的第一时间，目标集数被强行滚动到了可视区域内。因为 Widget 出现了，它的 FocusNode 才正式挂载到了焦点树上，变得“可被聚焦”。
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                final controller = _seriesScrollControllers[sid]!;
+                if (controller.hasClients) {
+                  // 必须精确计算 offset，确保 focusIndex 所在的 Widget 会被 ListView 渲染出来
+                  final double itemWidth = width;
+                  final double spacing = 12.0;
+                  final targetOffset = (focusIndex * (itemWidth + spacing))
+                      .clamp(0.0, controller.position.maxScrollExtent);
+                  controller.jumpTo(targetOffset);
+                }
+              });
+
+              return SingleChildScrollView(
+                child: SizedBox(
+                  height: height,
+                  child: ListView.separated(
+                    controller: _seriesScrollControllers[sid],
+                    scrollDirection: Axis.horizontal,
+                    itemCount: items.length,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    separatorBuilder: (_, _) => const SizedBox(width: 12),
+                    itemBuilder: (context, index) {
+                      final it = items[index];
+                      if (it is! Map) return const SizedBox.shrink();
+                      final node = _seriesFocusNodes[sid]![index];
+                      final ticks =
+                          it['UserData']?['PlaybackPositionTicks'] ?? 0;
+                      final isCurrent =
+                          it['Id']?.toString() ==
+                          _media['MediaSources']?[0]?['ItemId']?.toString();
+
+                      return Focus(
+                        focusNode: node,
+                        autofocus: isCurrent,
+                        onKeyEvent: (node, event) {
+                          if (!isCurrent && event is KeyDownEvent) {
+                            final key = event.logicalKey;
+                            if (key == LogicalKeyboardKey.accept ||
+                                key == LogicalKeyboardKey.select ||
+                                key == LogicalKeyboardKey.enter) {
+                              Navigator.of(context).pop();
+                              Navigator.of(context).pushReplacement(
+                                MaterialPageRoute(
+                                  builder: (context) => PlayerScreen(
+                                    mediaId: it['Id']?.toString() ?? '',
+                                    isSeries: (it['Type'] ?? '') == 'Series',
+                                    playbackPositionTicks: ticks is int
+                                        ? ticks
+                                        : 0,
+                                  ),
+                                ),
+                              );
+                              return KeyEventResult.handled;
+                            }
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: Builder(
+                          builder: (context) {
+                            final isFocused = Focus.of(context).hasFocus;
+
+                            return SizedBox(
+                              width: width,
+                              child: Stack(
+                                children: [
+                                  if (isCurrent)
+                                    Positioned.fill(
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Container(color: Colors.white24),
+                                      ),
+                                    ),
+                                  BuildItem(
+                                    item: it,
+                                    width: width,
+                                    isContinueWatching: false,
+                                    isMyLibrary: false,
+                                    isFocused: isFocused,
+                                    isShowOverview: true,
+                                    imageBoxFit: BoxFit.fitHeight,
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              );
+            }
+
+            Widget buildEpisodesTab() {
+              final sid = seriesId;
+              if (sid == null || sid.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              final model = context.read<AppModel>();
+
+              // If cached, show immediately
+              final cached = _seriesCache[sid];
+              if (cached != null) {
+                return buildEpisodesListForSidWidget(sid, cached);
+              }
+
+              // create or reuse a loading future so we don't request repeatedly
+              _seriesLoadingFutures[sid] ??= model.getSeriesList(sid);
+              return FutureBuilder<List>(
+                future: _seriesLoadingFutures[sid],
+                builder: (context, snap) {
+                  if (snap.connectionState != ConnectionState.done) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final items = snap.data ?? [];
+                  // cache the result
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      setState(() {
+                        _seriesCache[sid] = items;
+                      });
+                    }
+                  });
+                  if (items.isEmpty) {
+                    return Center(
+                      child: Text(
+                        i10n.noEpisodesFound,
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    );
+                  }
+                  return buildEpisodesListForSidWidget(sid, items);
+                },
               );
             }
 
@@ -1537,49 +1603,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                   ],
                 ),
-              );
-            }
-
-            Widget buildEpisodesTab() {
-              final sid = seriesId;
-              if (sid == null || sid.isEmpty) {
-                return const SizedBox.shrink();
-              }
-              final model = context.read<AppModel>();
-
-              // If cached, show immediately
-              final cached = _seriesCache[sid];
-              if (cached != null) {
-                return _buildEpisodesListForSidWidget(sid, cached);
-              }
-
-              // create or reuse a loading future so we don't request repeatedly
-              _seriesLoadingFutures[sid] ??= model.getSeriesList(sid);
-              return FutureBuilder<List>(
-                future: _seriesLoadingFutures[sid],
-                builder: (context, snap) {
-                  if (snap.connectionState != ConnectionState.done) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final items = snap.data ?? [];
-                  // cache the result
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) {
-                      setState(() {
-                        _seriesCache[sid] = items;
-                      });
-                    }
-                  });
-                  if (items.isEmpty) {
-                    return Center(
-                      child: Text(
-                        i10n.noEpisodesFound,
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    );
-                  }
-                  return _buildEpisodesListForSidWidget(sid, items);
-                },
               );
             }
 
