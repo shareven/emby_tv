@@ -110,6 +110,15 @@ Future<Map<String, dynamic>> buildPlaybackInfoBody({
       result['VideoProfiles'] ?? [],
     );
 
+    // 这样即使用户“关闭服务器转码”，但硬件不支持时，App 会强制回退到 H264
+    bool hardwareSupportsHevc = videoCodecs.any(
+      (c) => ['hevc', 'h265', 'hevc10'].contains(c.toLowerCase()),
+    );
+
+    if (!hardwareSupportsHevc) {
+      disableHevc = true;
+    }
+
     // --- 动态 Level 处理 ---
     int rawLevel = _findMaxLevel(videoProfiles, "h264", 51);
     int finalLevel = disableHevc ? 51 : (rawLevel > 62 ? 62 : rawLevel);
@@ -211,8 +220,8 @@ Future<Map<String, dynamic>> buildPlaybackInfoBody({
           {
             "Container": "mkv",
             "Type": "Video",
-            "AudioCodec": "mp3,aac,opus,flac,vorbis",
-            "VideoCodec": "h264,hevc,av1,vp8,vp9",
+            "AudioCodec": supportedAudio,
+            "VideoCodec": disableHevc ? "h264" : supportedVideo,
             "Context": "Static",
             "MaxAudioChannels": "8",
             "CopyTimestamps": true,
@@ -220,8 +229,8 @@ Future<Map<String, dynamic>> buildPlaybackInfoBody({
           {
             "Container": "ts",
             "Type": "Video",
-            "AudioCodec": "mp3,aac",
-            "VideoCodec": "hevc,h264,av1",
+            "AudioCodec": supportedAudio,
+            "VideoCodec": disableHevc ? "h264" : supportedVideo,
             "Context": "Streaming",
             "Protocol": "hls",
             "MaxAudioChannels": "8",
@@ -241,7 +250,7 @@ Future<Map<String, dynamic>> buildPlaybackInfoBody({
           {
             "Container": "mp4",
             "Type": "Video",
-            "AudioCodec": "mp3,aac,opus,flac,vorbis",
+            "AudioCodec": supportedAudio,
             "VideoCodec": "h264",
             "Context": "Static",
             "Protocol": "http",
@@ -343,7 +352,7 @@ Future<Map<String, dynamic>> buildPlaybackInfoBody({
         ],
       },
     };
-    } catch (e) {
+  } catch (e) {
     print("Build PlaybackInfo Error: $e");
     return {};
   }
