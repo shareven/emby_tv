@@ -1,0 +1,4 @@
+<resources>
+
+    <style name="Theme.Embytv" parent="Theme.AppCompat.DayNight.NoActionBar" />
+</resources>
