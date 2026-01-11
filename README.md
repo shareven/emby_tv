@@ -29,7 +29,7 @@ This is an open-source Emby client aimed at learning and exchanging technical kn
 - 选集与剧集导航（Series/Episodes）
 - 简中/英文本地化（跟随系统语言）
 - 扫码录入登录信息
-- 支持硬解播放4k DHR视频，硬解失败时自动服务器转码播放
+- 支持硬解播放4k DHR视频，硬解失败时自动调用服务器转码播放，服务器硬件加速时显示⚡️
 - 支持多种主题色选择
 - 首页展示收藏列表
 
@@ -38,7 +38,7 @@ This is an open-source Emby client aimed at learning and exchanging technical kn
 - Series / Episodes navigation
 - Localization: Simplified Chinese and English (follows system locale)
 - Scan QR code to enter login information 
-- Supports hardware-accelerated playback of 4K HDR videos; automatically switches to server-side transcoding if hardware acceleration fails, indicated by a ⚡️ icon 
+- Supports hardware decoding of 4K HDR video; if hardware decoding fails, it automatically switches to server-side transcoding for playback.  A lightning bolt icon (⚡️) is displayed when server-side hardware acceleration is active.
 - Supports multiple theme color options 
 - Displays a favorites list on the homepage
 
