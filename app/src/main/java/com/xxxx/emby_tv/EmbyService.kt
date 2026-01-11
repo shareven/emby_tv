@@ -342,46 +342,6 @@ class EmbyService(
         return httpAsBaseItemDtoList(url)
     }
 
-    /**
-     * 获取剧集的"下一集"播放信息 (逻辑同步自 Flutter 版)
-     *
-     * 逻辑：
-     * 1. 尝试获取 NextUp (下一集)
-     * 2. 如果没有 NextUp，则获取剧集列表的第一集
-     * 3. 拿到 ID 后，调用 PlaybackInfo 获取播放地址
-     */
-    suspend fun getShowsNextBackInfo(
-        userId: String,
-        seriesId: String,
-        startTimeTicks: Long,
-        disableHevc: Boolean,
-    ): MediaDto = withContext(Dispatchers.IO) {
-
-        val url = "/Shows/NextUp?SeriesId=$seriesId&UserId=$userId" +
-                "&EnableTotalRecordCount=false&ExcludeLocationTypes=Virtual" +
-                "&Fields=ProductionYear,PremiereDate,Container&X-Emby-Token=$apiKey"
-
-
-        val itemsArray = httpAsBaseItemDtoList(url)
-
-
-        // 2. 逻辑判断：如果 Items 为空，则去请求 SeriesList (对应 Flutter 的 items.isEmpty)
-        val items = itemsArray.ifEmpty {
-            getSeriesList(userId, seriesId)
-        }
-
-        // 3. 提取第一个项目的 ID (对应 Flutter 的 items.first['Id'])
-        val firstItem = items.firstOrNull()
-        val finalId = firstItem?.id ?: ""
-
-        // 4. 根据 ID 是否为空决定调用哪个 PlaybackInfo (对应 Flutter 的 if(id.isEmpty))
-        return@withContext if (finalId.isEmpty()) {
-            getPlaybackInfo(userId, seriesId, startTimeTicks)
-        } else {
-            getPlaybackInfo(userId, finalId, startTimeTicks)
-        }
-    }
-
 
     suspend fun getPlayingSessions(): List<SessionDto> {
         val url = "/Sessions?X-Emby-Token=$apiKey"
@@ -389,7 +349,6 @@ class EmbyService(
     }
 
     // --- 播放相关 ---
-
     suspend fun getPlaybackInfo(
         userId: String,
         mediaId: String,
@@ -400,9 +359,10 @@ class EmbyService(
     ): MediaDto = withContext(Dispatchers.IO) {
         try {
 
+            // 非常重要：告诉服务器，设置的能力，可以处理哪些媒体数据
             val body = buildPlaybackInfoBody(disableHevc)
 
-            // 2. 构建 URL
+            // 构建 URL
             val url = "/Items/$mediaId/PlaybackInfo?UserId=$userId" +
                     "&StartTimeTicks=$startTimeTicks" +
                     "&IsPlayback=true" +
@@ -414,15 +374,14 @@ class EmbyService(
                      (selectedAudioIndex?.let { "&AudioStreamIndex=$it" } ?: "") +
                     (selectedSubtitleIndex?.let { "&SubtitleStreamIndex=$it" } ?: "")
 
-            // 3. 执行 POST 请求并解析 (httpAsJsonObject 内部已包含流式解析和空判断)
-            // 这对应了 Flutter 中的 http(method: "POST") 和 jsonDecode
+           
             val result = httpAsJsonObject(url, "POST", body)
 
             return@withContext gson.fromJson(result, MediaDto::class.java)
         } catch (e: Exception) {
-            // 4. 错误处理 (对应 Flutter 的 showErrorMsg)
+           
             withContext(Dispatchers.Main) {
-                // 这里可以替换为你 App 的弹窗/Toast 通知逻辑
+               
                 println("Failed to get playback info: ${e.message}")
             }
             return@withContext MediaDto() // 返回空对象，对应 Flutter 的 return {}
