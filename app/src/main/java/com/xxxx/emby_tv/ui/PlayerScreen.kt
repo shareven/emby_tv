@@ -484,7 +484,7 @@ fun PlayerScreen(
                 // 构建字幕 URL
                 // 即使是内置字幕，也可以通过此 API 提取 (Stream.srt, Stream.vtt 等)
                 val subUrl =
-                    "${appModel.serverUrl}/Videos/$mediaId/$mediaSourceId/Subtitles/$index/Stream.$codec?api_key=${appModel.apiKey}"
+                    "${appModel.serverUrl}/emby/Videos/$mediaId/$mediaSourceId/Subtitles/$index/Stream.$codec?api_key=${appModel.apiKey}"
 
                 val mimeType = when {
                     codec.contains("ass") || codec.contains("ssa") -> MimeTypes.TEXT_SSA
