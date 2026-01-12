@@ -26,8 +26,8 @@ android {
         applicationId = "com.xxxx.emby_tv"
         minSdk = 23
         targetSdk = 36
-        versionName = "2.0.0"
-        versionCode = 200
+        versionName = "2.0.1"
+        versionCode = 201
 
     }
 
@@ -79,7 +79,7 @@ dependencies {
 
     // 3. Media3 ExoPlayer (2025年最新稳定版 1.5.1)
     // 该版本优化了 4K 杜比视界 (Dolby Vision) 的硬件协商逻辑
-    val media3Version = "1.5.1"
+    val media3Version = "1.9.0"
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
     implementation("androidx.media3:media3-common:$media3Version")

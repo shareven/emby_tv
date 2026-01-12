@@ -42,6 +42,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.Timeline
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
@@ -120,7 +121,6 @@ fun PlayerScreen(
     var hasTriedTranscodeFallback by remember { mutableStateOf(false) }
     var currentTracks by remember { mutableStateOf<Tracks?>(null) }
 
-    var pendingSeekPositionMs by remember { mutableStateOf<Long?>(null) }
     var pendingAutoPlay by remember { mutableStateOf(false) }
 
     val playbackInfoFailText = stringResource(R.string.failed_get_playback_info)
@@ -202,7 +202,7 @@ fun PlayerScreen(
             "ItemId" to mediaId,
             "EventName" to "Stopped"
         )
-
+       
         // 2. 执行停止报告
         appModel.stopped(body)
     }
@@ -307,8 +307,7 @@ fun PlayerScreen(
                             .setUri(newVideoUrl)
                             .build()
 
-                        player.setMediaItem(mediaItem)
-                        pendingSeekPositionMs = position
+                        player.setMediaItem(mediaItem, position)
                         pendingAutoPlay = true
                         player.playWhenReady = false
                         player.prepare()
@@ -481,41 +480,54 @@ fun PlayerScreen(
                 val lang = track.language ?: "und"
                 val label = track.displayTitle ?: "Subtitle"
 
-                // 构建字幕 URL
-                // 即使是内置字幕，也可以通过此 API 提取 (Stream.srt, Stream.vtt 等)
-                val subUrl =
-                    "${appModel.serverUrl}/emby/Videos/$mediaId/$mediaSourceId/Subtitles/$index/Stream.$codec?api_key=${appModel.apiKey}"
+                // 关键修改：基于Emby返回的数据，支持所有可外部访问的字幕
+                val isLoadableSubtitle = track.supportsExternalStream == true || track.isExternal == true
+               
+                if (isLoadableSubtitle) {
+                    // 构建字幕 URL
+                    // 即使是内置字幕，也可以通过此 API 提取 (Stream.srt, Stream.vtt 等)
+                    val subUrl =
+                        "${appModel.serverUrl}/emby/Videos/$mediaId/$mediaSourceId/Subtitles/$index/Stream.$codec?api_key=${appModel.apiKey}"
 
-                val mimeType = when {
-                    codec.contains("ass") || codec.contains("ssa") -> MimeTypes.TEXT_SSA
-                    codec.contains("vtt") -> MimeTypes.TEXT_VTT
-                    else -> MimeTypes.APPLICATION_SUBRIP
-                }
+                    val mimeType = when {
+                        codec.contains("ass") || codec.contains("ssa") -> MimeTypes.TEXT_SSA
+                        codec.contains("vtt") -> MimeTypes.TEXT_VTT
+                        else -> MimeTypes.APPLICATION_SUBRIP
+                    }
 
-                val config = MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl))
-                    .setId(index.toString()) // 关键：设置 ID 与 Emby Index 一致，方便匹配
-                    .setMimeType(mimeType)
-                    .setLanguage(lang)
-                    .setLabel(label)
-                    .setSelectionFlags(if (index == selectedSubtitleIndex) C.SELECTION_FLAG_DEFAULT else 0)
-                    .build()
-                subtitleConfigs.add(config)
+                    val config = MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl))
+                        .setId(index.toString()) // 关键：设置 ID 与 Emby Index 一致，方便匹配
+                        .setMimeType(mimeType)
+                        .setLanguage(lang)
+                        .setLabel(label)
+                        .setSelectionFlags(if (index == selectedSubtitleIndex) C.SELECTION_FLAG_DEFAULT else 0)
+                        .build()
+                    subtitleConfigs.add(config)
+
+                 } 
             }
 
+           
             val mediaItemBuilder = MediaItem.Builder()
                 .setUri(videoUrl)
                 .setSubtitleConfigurations(subtitleConfigs)
 
+            // 计算起始位置：优先级为播放进度 > 参数传入位置 > 0
+            val startPositionMs = if (position > 0) {
+                position
+            } else if (playbackPositionTicks > 0) {
+                playbackPositionTicks / 10000
+            } else {
+                0L
+            }
+
             val mediaItem = mediaItemBuilder.build()
 
-            player.setMediaItem(mediaItem)
+            // 直接在setMediaItem中设置跳转位置（Media3 API支持）
+            player.setMediaItem(mediaItem, startPositionMs)
 
-            pendingSeekPositionMs = if (playbackPositionTicks > 0 && position == 0L) {
-                (playbackPositionTicks / 10000).toLong()
-            } else if (position > 0) {
-                position
-            } else {
-                null
+            if (startPositionMs > 0) {
+                Log.d("Player", "Setting initial position via setMediaItem: $startPositionMs ms")
             }
 
             pendingAutoPlay = true
@@ -888,6 +900,7 @@ fun PlayerScreen(
                             "CanSeek" to true,
                             "EventName" to "TimeUpdate"
                         )
+
                         appModel.reportPlaybackProgress(body)
                     }
 
@@ -1007,27 +1020,27 @@ fun PlayerScreen(
     LaunchedEffect(player) {
         while (true) {
             if (player.isPlaying || player.playbackState == Player.STATE_BUFFERING) {
-                // 1. 处理 Duration 为负数（C.TIME_UNSET）的情况
-                val rawDuration = player.duration
-                if (rawDuration > 0) {
-                    duration = rawDuration
-                } else {
-                    // Fallback to metadata duration
-                    val source = media.mediaSources?.firstOrNull()
-                    val runTimeTicks = source?.runTimeTicks ?: 0
-                    if (runTimeTicks > 0) {
-                        duration = runTimeTicks / 10000
-                    }
-                }
-
-                // 2. 处理 CurrentPosition 异常（例如直播流开始时的负值偏移）
+                // 1. 更新当前播放位置
                 val rawPosition = player.currentPosition
                 position = if (rawPosition > 0) rawPosition else 0L
 
-                // 3. 缓存进度
+                // 2. 更新缓存进度
                 buffered = player.bufferedPosition.coerceAtLeast(0L)
 
-
+                // 3. 时长更新由onTimelineChanged处理，这里只需要fallback
+                if (duration <= 0) {
+                    val rawDuration = player.duration
+                    if (rawDuration > 0) {
+                        duration = rawDuration
+                    } else {
+                        // Fallback to metadata duration
+                        val source = media.mediaSources?.firstOrNull()
+                        val runTimeTicks = source?.runTimeTicks ?: 0
+                        if (runTimeTicks > 0) {
+                            duration = runTimeTicks / 10000
+                        }
+                    }
+                }
             }
 
             // 每 800 毫秒更新一次进度
@@ -1047,20 +1060,32 @@ fun PlayerScreen(
                 currentTracks = tracks
             }
 
+            override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                if (reason == Player.TIMELINE_CHANGE_REASON_SOURCE_UPDATE) {
+                    val durationMs = player.duration // 此时时长已可用
+                    if (durationMs != C.TIME_UNSET) {
+                        // 执行逻辑
+                        duration = durationMs
+                    }
+                }
+            }
+
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_BUFFERING) {
                     isBuffering = true
                 } else if (state == Player.STATE_READY) {
                     isBuffering = false
+                    
+//                    // 在STATE_READY时获取准确时长
+//                    val rawDuration = player.duration
+//                    if (rawDuration > 0) {
+//                        duration = rawDuration
+//                        Log.d("Player", "Duration updated from READY state: $duration ms")
+//                    }
                 }
 
                 if (state == Player.STATE_READY && pendingAutoPlay) {
-                    val seekMs = pendingSeekPositionMs
-                    pendingSeekPositionMs = null
                     pendingAutoPlay = false
-                    if (seekMs != null && seekMs > 0) {
-                        player.seekTo(seekMs)
-                    }
                     player.play()
                 }
 

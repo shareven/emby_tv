@@ -652,6 +652,8 @@ class EmbyService(
                     add(createSubtitleProfile("vtt", "External"))
                     add(createSubtitleProfile("ass", "External"))
                     add(createSubtitleProfile("ssa", "External"))
+                    add(createSubtitleProfile("srt", "External"))
+                    add(createSubtitleProfile("subrip", "External"))
                 })
 
                 add("ResponseProfiles", JsonArray().apply {

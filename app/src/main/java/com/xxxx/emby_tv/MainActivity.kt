@@ -25,16 +25,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.google.gson.Gson
-import com.google.gson.JsonObject
 import com.xxxx.emby_tv.ui.MediaDetailScreen
 import com.xxxx.emby_tv.ui.HomeScreen
 import com.xxxx.emby_tv.ui.UpdateScreen
 import com.xxxx.emby_tv.ui.components.BuildGradientBackground
 import com.xxxx.emby_tv.ui.components.Loading
-import com.xxxx.emby_tv.ui.theme.GradientBackground
 import com.xxxx.emby_tv.ui.theme.ThemeColorManager
 
-// import com.xxxx.emby_tv.ui.screens.* // Remove wildcard
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

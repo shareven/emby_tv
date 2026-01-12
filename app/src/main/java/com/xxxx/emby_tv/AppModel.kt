@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -163,13 +164,12 @@ class AppModel(application: Application) : AndroidViewModel(application) {
             val savedUserId = prefs.getString("userId", null)
 
             getDeviceId()
-
             // 验证本地凭证有效性
             if (savedServerUrl != null && savedApiKey != null && savedUserId != null) {
                 try {
                     val service = EmbyService(getApplication(), savedServerUrl, "", deviceId)
                     val isValid = service.testKey(savedUserId, savedApiKey)
-
+                    Log.e("testKey isValid",isValid.toString())
                     if ( isValid) {
                         serverUrl = savedServerUrl
                         apiKey = savedApiKey
@@ -189,6 +189,8 @@ class AppModel(application: Application) : AndroidViewModel(application) {
                     userId = savedUserId
                     isLoaded = true
                 }
+            }else {
+                isLoaded = true
             }
 
         }
