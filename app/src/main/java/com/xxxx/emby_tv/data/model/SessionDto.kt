@@ -136,7 +136,7 @@ data class TranscodingInfo(
     @SerializedName("VideoDecoderIsHardware") val videoDecoderIsHardware: Boolean? = null,
     @SerializedName("VideoEncoderIsHardware") val videoEncoderIsHardware: Boolean? = null,
     @SerializedName("VideoPipelineInfo") val videoPipelineInfo: List<VideoPipelineInfo>? = null,
-    @SerializedName("SubtitlePipelineInfos") val subtitlePipelineInfos: List<SubtitlePipelineInfo>? = null
+    @SerializedName("SubtitlePipelineInfos") val subtitlePipelineInfos: List<List<SubtitlePipelineInfo>>? = null
 )
 
 /**

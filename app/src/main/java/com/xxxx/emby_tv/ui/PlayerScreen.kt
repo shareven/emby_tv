@@ -4,7 +4,11 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import android.view.ViewGroup
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
@@ -25,6 +29,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.Key
@@ -65,6 +71,7 @@ import com.xxxx.emby_tv.data.model.MediaStreamDto
 import com.xxxx.emby_tv.data.model.SessionDto
 import com.xxxx.emby_tv.ui.components.PlayerMenu
 import com.xxxx.emby_tv.ui.components.PlayerOverlay
+import com.xxxx.emby_tv.ui.components.ResumePlaybackButtons
 import com.xxxx.emby_tv.ui.components.getAudioTrack
 import com.xxxx.emby_tv.ui.components.getVideoTrack
 import com.xxxx.emby_tv.ui.viewmodel.PlayerViewModel
@@ -89,7 +96,7 @@ fun PlayerScreen(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
-    
+
     // 获取 Repository 用于直接访问
     val repository = remember { EmbyRepository.getInstance(context) }
     val serverUrl = repository.serverUrl ?: ""
@@ -338,11 +345,10 @@ fun PlayerScreen(
     }
 
 
-    // 加载设置
+    // 加载设置（playbackCorrection 不再持久化，每次进入播放页默认关闭，只对当前视频生效）
     LaunchedEffect(Unit) {
         try {
             val prefs = context.getSharedPreferences("emby_tv_prefs", Context.MODE_PRIVATE)
-            playbackCorrection = prefs.getInt("playback_correction", 0)
             playMode = prefs.getInt("play_mode", 0)
         } catch (e: Exception) {
             e.printStackTrace()
@@ -427,50 +433,6 @@ fun PlayerScreen(
                 }
             }
 
-            if (path != null) {
-                // 音轨和字幕修正逻辑
-                // 1. 判断音轨是否为物理默认
-                var isPhysicalDefaultAudio = false
-                try {
-                    val currentAudio = audioTracks.firstOrNull { s ->
-                        s.index == selectedAudioIndex
-                    }
-                    isPhysicalDefaultAudio = currentAudio?.isDefault == true
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-
-                // 2. 判断字幕是否为内置且非物理默认
-                var isInternalNonDefaultSubtitle = false
-                try {
-                    val currentSub = subtitleTracks.firstOrNull { s ->
-                        s.index == selectedSubtitleIndex
-                    }
-                    val isInternal = currentSub?.isExternal != true
-                    val isDefaultSub = currentSub?.isDefault == true
-                    if (isInternal == true && isDefaultSub != true) {
-                        isInternalNonDefaultSubtitle = true
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-
-                if (!isPhysicalDefaultAudio || isInternalNonDefaultSubtitle) {
-                    if (path.contains("original.")) {
-                        val regex = Regex("""original\.(\w+)""")
-                        path = regex.replace(path) { matchResult ->
-                            val extension = matchResult.groupValues[1].ifEmpty { "mkv" }
-                            "stream.$extension"
-                        }
-                    }
-                    path = path.replace(Regex("""[&?]AudioStreamIndex=\d+"""), "")
-                    path =
-                        if (path.contains("?")) "${path}&AudioStreamIndex=$selectedAudioIndex" else "${path}?AudioStreamIndex=$selectedAudioIndex"
-
-                    path = path.replace(Regex("""[&?]SubtitleStreamIndex=\d+"""), "")
-                    path = "${path}&SubtitleStreamIndex=$selectedSubtitleIndex"
-                }
-            }
 
             videoUrl = if (path != null) "${serverUrl}/emby$path" else null
             hasReportedPlaying = false
@@ -490,6 +452,9 @@ fun PlayerScreen(
 
             // 添加所有字幕 (External + Internal extracted)
             // Emby 允许通过 API 提取内置字幕，这能避免转码流丢失字幕的问题
+            Log.d("Player", "=== Building Subtitle Configurations ===")
+            Log.d("Player", "Total subtitleTracks: ${subtitleTracks.size}")
+            
             subtitleTracks.forEach { track ->
                 val index = track.index ?: 0
                 val codec = track.codec?.lowercase() ?: "srt"
@@ -498,30 +463,39 @@ fun PlayerScreen(
 
                 // 关键修改：基于Emby返回的数据，支持所有可外部访问的字幕
                 val isLoadableSubtitle = track.supportsExternalStream == true || track.isExternal == true
+                
+                Log.d("Player", "Track[$index]: Codec=$codec, IsExternal=${track.isExternal}, SupportsExternal=${track.supportsExternalStream}, Loadable=$isLoadableSubtitle")
                
                 if (isLoadableSubtitle) {
                     // 构建字幕 URL
-                    // 即使是内置字幕，也可以通过此 API 提取 (Stream.srt, Stream.vtt 等)
+                    // Emby 服务器支持字幕格式转换，统一请求为 SRT 格式以确保 ExoPlayer 兼容性
+                    // ASS/SSA 字幕在 ExoPlayer 中渲染支持有限，转为 SRT 更可靠
+                    val requestFormat = when {
+                        codec.contains("vtt") -> "vtt"
+                        else -> "srt" // 将 ass/ssa/subrip 等统一转为 srt
+                    }
                     val subUrl =
-                        "${serverUrl}/emby/Videos/$mediaId/$mediaSourceId/Subtitles/$index/Stream.$codec?api_key=${apiKey}"
+                        "${serverUrl}/emby/Videos/$mediaId/$mediaSourceId/Subtitles/$index/Stream.$requestFormat?api_key=${apiKey}"
 
-                    val mimeType = when {
-                        codec.contains("ass") || codec.contains("ssa") -> MimeTypes.TEXT_SSA
-                        codec.contains("vtt") -> MimeTypes.TEXT_VTT
+                    val mimeType = when (requestFormat) {
+                        "vtt" -> MimeTypes.TEXT_VTT
                         else -> MimeTypes.APPLICATION_SUBRIP
                     }
 
+                    // 使用 "Label [Index]" 格式作为唯一标识，避免 ExoPlayer 自动去重导致匹配失败
+                    val uniqueLabel = "$label [$index]"
                     val config = MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl))
-                        .setId(index.toString()) // 关键：设置 ID 与 Emby Index 一致，方便匹配
+                        .setId(index.toString()) // 设置 ID 与 Emby Index 一致
                         .setMimeType(mimeType)
                         .setLanguage(lang)
-                        .setLabel(label)
+                        .setLabel(uniqueLabel)
                         .setSelectionFlags(if (index == selectedSubtitleIndex) C.SELECTION_FLAG_DEFAULT else 0)
                         .build()
                     subtitleConfigs.add(config)
-
+                    Log.d("Player", "Added subtitle config: Index=$index, URL=$subUrl")
                  } 
             }
+            Log.d("Player", "Total subtitle configs added: ${subtitleConfigs.size}")
 
            
             val mediaItemBuilder = MediaItem.Builder()
@@ -552,269 +526,91 @@ fun PlayerScreen(
     }
 
     // 更新选中字幕
-    // LaunchedEffect(selectedSubtitleIndex, subtitleTracks, currentTracks) {
-    //     if (subtitleTracks.isEmpty()) return@LaunchedEffect
+    // 外置字幕和支持外部流的字幕通过 SubtitleConfiguration 加载，使用 ID 匹配
+    // 内嵌字幕（直接播放）使用顺序匹配
+    LaunchedEffect(selectedSubtitleIndex, subtitleTracks, currentTracks) {
+        if (subtitleTracks.isEmpty()) return@LaunchedEffect
 
-    //     // 如果是 -1，关闭字幕逻辑
-    //     if (selectedSubtitleIndex == -1) {
-    //         player.trackSelectionParameters = player.trackSelectionParameters
-    //             .buildUpon()
-    //             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-    //             .build()
-    //         return@LaunchedEffect
-    //     }
+        // 如果是 -1，关闭字幕
+        if (selectedSubtitleIndex == -1) {
+            player.trackSelectionParameters = player.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                .build()
+            Log.d("Player", "Subtitle disabled")
+            return@LaunchedEffect
+        }
 
-    //     // Fix: Use find to match by Index, not list index
-    //     val targetTrack = subtitleTracks.find { it.index == selectedSubtitleIndex }
-    //         ?: run {
-    //             Log.w(
-    //                 "Player",
-    //                 "Target subtitle index $selectedSubtitleIndex not found in metadata"
-    //             )
-    //             return@LaunchedEffect
-    //         }
-
-    //     val targetOrdinalIndex = subtitleTracks.indexOf(targetTrack)
-    //     val targetLabel = targetTrack.displayTitle
-    //     val targetIndex = targetTrack.index?.toString() ?: ""
-    //     val targetLanguage = targetTrack.language?.lowercase()
-
-    //     // 开启文本轨道
-    //     var parametersBuilder = player.trackSelectionParameters.buildUpon()
-    //         .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-
-    //     // 1.5.1 推荐做法：先尝试通过首选语言/标签匹配，增加成功率
-    //     if (targetLanguage != null) {
-    //         parametersBuilder =
-    //             parametersBuilder.setPreferredTextLanguage(targetLanguage)
-    //     }
-
-    //     // 执行强制覆盖逻辑
-    //     // 使用 currentTracks 进行匹配
-    //     val groups = currentTracks?.groups ?: player.currentTracks.groups
-    //     val trackGroups = groups.filter { it.type == C.TRACK_TYPE_TEXT }
-    //     var isMatched = false
-
-    //     Log.d(
-    //         "Player",
-    //         "Subtitle Selection: Target [Index:$targetIndex, Label:$targetLabel, Lang:$targetLanguage, Ordinal:$targetOrdinalIndex]"
-    //     )
-
-    //     // // 策略1：遍历所有 Text Track Group 进行多重匹配
-    //     // outer@ for (group in trackGroups) {
-    //     //     for (i in 0 until group.length) {
-    //     //         val format = group.getTrackFormat(i)
-    //     //         val formatId = format.id
-    //     //         val formatLabel = format.label
-    //     //         val formatLang = format.language?.lowercase()
-
-    //     //         // 1. ID 精确匹配 (Emby Index vs ExoPlayer ID)
-    //     //         if (formatId == targetIndex) {
-    //     //             parametersBuilder.setOverrideForType(
-    //     //                 TrackSelectionOverride(
-    //     //                     group.mediaTrackGroup,
-    //     //                     i
-    //     //                 )
-    //     //             )
-    //     //             isMatched = true
-    //     //             Log.d("Player", "Matched subtitle by ID: $formatId")
-    //     //             break@outer
-    //     //         }
-
-    //     //         // 2. Label 精确匹配
-    //     //         if (formatLabel != null && targetLabel != null && formatLabel.equals(
-    //     //                 targetLabel,
-    //     //                 ignoreCase = true
-    //     //             )
-    //     //         ) {
-    //     //             parametersBuilder.setOverrideForType(
-    //     //                 TrackSelectionOverride(
-    //     //                     group.mediaTrackGroup,
-    //     //                     i
-    //     //                 )
-    //     //             )
-    //     //             isMatched = true
-    //     //             Log.d("Player", "Matched subtitle by Label (Exact): $formatLabel")
-    //     //             break@outer
-    //     //         }
-
-    //     //         // 3. Label 模糊匹配 (包含关系)
-    //     //         if (formatLabel != null && targetLabel != null && (formatLabel.contains(
-    //     //                 targetLabel,
-    //     //                 true
-    //     //             ) || targetLabel.contains(formatLabel, true))
-    //     //         ) {
-    //     //             parametersBuilder.setOverrideForType(
-    //     //                 TrackSelectionOverride(
-    //     //                     group.mediaTrackGroup,
-    //     //                     i
-    //     //                 )
-    //     //             )
-    //     //             isMatched = true
-    //     //             Log.d(
-    //     //                 "Player",
-    //     //                 "Matched subtitle by Label (Fuzzy): Player=$formatLabel / Target=$targetLabel"
-    //     //             )
-    //     //             break@outer
-    //     //         }
-
-    //     //         // 4. 语言匹配 (Language Code) - 作为较弱的匹配条件
-    //     //         // 注意：如果有多个同语言轨道，这里可能会匹配到第一个，所以要在 Label 匹配之后
-    //     //         if (targetLanguage != null && formatLang == targetLanguage) {
-    //     //             // 此时不立即 break，而是先标记，继续寻找是否有 Label 匹配的更优解
-    //     //             // 但为了简单，如果上面都没匹配到，我们暂时信任语言匹配
-    //     //             // 这里做一个简单的优化：如果还没找到 Match，记录这个作为备选
-    //     //             // 实际实现：这通常由 exoPlayer 的 setPreferredTextLanguage 处理了，但为了强制覆盖，我们也可以做。
-    //     //             // 风险：可能有多个 "English"，选错了一个 Forced 轨道。
-    //     //             // 暂时跳过纯语言强制匹配，交给 setPreferredTextLanguage，或者仅 Log
-    //     //             Log.d("Player", "Potential match by Language: $formatLang")
-    //     //         }
-    //     //     }
-    //     // }
-
-    //     // 策略2：顺序匹配 (应对 Emby ID 偏移问题，如 Index:3 -> ID:4)
-    //     if (!isMatched && targetOrdinalIndex != -1) {
-    //         var trackCounter = 0
-    //         outerOrdinal@ for (group in trackGroups) {
-    //             for (i in 0 until group.length) {
-    //                 val format = group.getTrackFormat(i)
-    //                 // 假设 ExoPlayer 解析出的文本轨道顺序与 Emby 元数据顺序一致
-    //                 // 注意：这假设 trackGroups 中只包含我们需要对应的字幕轨道
-    //                 if (trackCounter == targetOrdinalIndex) {
-    //                     parametersBuilder.setOverrideForType(
-    //                         TrackSelectionOverride(group.mediaTrackGroup, i)
-    //                     )
-    //                     isMatched = true
-    //                     Log.d(
-    //                         "Player",
-    //                         "Matched subtitle by Ordinal: MetadataIndex=$targetIndex -> ExoOrdinal=$trackCounter (Label: ${format.label})"
-    //                     )
-    //                     break@outerOrdinal
-    //                 }
-    //                 trackCounter++
-    //             }
-
-    //         }
-    //     }
-
-    //     player.trackSelectionParameters = parametersBuilder.build()
-
-    //     // 调试输出
-    //     if (!isMatched) {
-    //         Log.w("Player", "Unable to match subtitle target: $targetLabel")
-    //         // 打印现有轨道以供调试
-    //         Log.d("Player", "--- Dump Available Text Tracks ---")
-    //         trackGroups.forEachIndexed { gi, group ->
-    //             for (i in 0 until group.length) {
-    //                 val f = group.getTrackFormat(i)
-    //                 Log.d(
-    //                     "Player",
-    //                     "Group[$gi] Track[$i]: ID=${f.id}, Label=${f.label}, Lang=${f.language}"
-    //                 )
-    //             }
-    //         }
-    //         Log.d("Player", "----------------------------------")
-    //     }
-    // }
-
-    // 更新选中音频
-    LaunchedEffect(selectedAudioIndex, audioTracks, currentTracks) {
-        if (audioTracks.isEmpty()) return@LaunchedEffect
-        if (selectedAudioIndex <= -1) return@LaunchedEffect
-
-        val targetTrack = audioTracks.find { it.index == selectedAudioIndex }
+        // 找到目标字幕
+        val targetTrack = subtitleTracks.find { it.index == selectedSubtitleIndex }
             ?: run {
-                Log.w(
-                    "Player",
-                    "Target audio index $selectedAudioIndex not found in metadata"
-                )
+                Log.w("Player", "Target subtitle index $selectedSubtitleIndex not found in metadata")
                 return@LaunchedEffect
             }
 
-        val targetOrdinalIndex = audioTracks.indexOf(targetTrack)
+        val targetOrdinalIndex = subtitleTracks.indexOf(targetTrack)
         val targetLabel = targetTrack.displayTitle
         val targetIndex = targetTrack.index?.toString() ?: ""
-        val targetLanguage = targetTrack.language?.lowercase()
+        // 判断是否通过 SubtitleConfiguration 加载（外置或支持外部流）
+        val isLoadedViaConfig = targetTrack.supportsExternalStream == true || targetTrack.isExternal == true
 
+        Log.d("Player", "Subtitle Selection: Target [EmbyIndex:$targetIndex, Label:$targetLabel, OrdinalIndex:$targetOrdinalIndex, LoadedViaConfig:$isLoadedViaConfig]")
+
+        // 开启文本轨道
         var parametersBuilder = player.trackSelectionParameters.buildUpon()
-
-        // 优先语言（如果有）
-        if (targetLanguage != null) {
-            parametersBuilder = parametersBuilder.setPreferredAudioLanguage(targetLanguage)
-        }
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
 
         val groups = currentTracks?.groups ?: player.currentTracks.groups
-        val trackGroups = groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+        val trackGroups = groups.filter { it.type == C.TRACK_TYPE_TEXT }
         var isMatched = false
 
-        Log.d(
-            "Player",
-            "Audio Selection: Target [Index:$targetIndex, Label:$targetLabel, Lang:$targetLanguage, Ordinal:$targetOrdinalIndex]"
-        )
+        // 打印可用字幕轨道
+        Log.d("Player", "--- Available Text Tracks ---")
+        trackGroups.forEachIndexed { gi, group ->
+            for (i in 0 until group.length) {
+                val f = group.getTrackFormat(i)
+                Log.d("Player", "Group[$gi] Track[$i]: ID=${f.id}, Label=${f.label}, Lang=${f.language}")
+            }
+        }
 
-        // 策略1：遍历所有 Audio Track Group 进行多重匹配
+        if (isLoadedViaConfig) {
+            // 策略1：使用唯一 Label 格式 "Label [Index]" 匹配（我们在 SubtitleConfiguration 中设置的）
+            val uniqueTargetLabel = "$targetLabel [$targetIndex]"
         outer@ for (group in trackGroups) {
             for (i in 0 until group.length) {
                 val format = group.getTrackFormat(i)
-                val formatId = format.id
-                val formatLabel = format.label
-                val formatLang = format.language?.lowercase()
-
-                // 1. ID 精确匹配
-                if (formatId == targetIndex) {
+                    if (format.label == uniqueTargetLabel) {
                     parametersBuilder.setOverrideForType(
                         TrackSelectionOverride(group.mediaTrackGroup, i)
                     )
                     isMatched = true
-                    Log.d("Player", "Matched audio by ID: $formatId")
+                        Log.d("Player", "Matched subtitle by UniqueLabel: ${format.label} -> ID:${format.id}")
                     break@outer
                 }
-
-                // 2. Label 精确匹配
-                if (formatLabel != null && targetLabel != null && formatLabel.equals(
-                        targetLabel,
-                        ignoreCase = true
-                    )
-                ) {
-                    parametersBuilder.setOverrideForType(
-                        TrackSelectionOverride(group.mediaTrackGroup, i)
-                    )
-                    isMatched = true
-                    Log.d("Player", "Matched audio by Label (Exact): $formatLabel")
-                    break@outer
                 }
-
-                // 3. Label 模糊匹配
-                if (formatLabel != null && targetLabel != null && (formatLabel.contains(
-                        targetLabel,
-                        true
-                    ) || targetLabel.contains(formatLabel, true))
-                ) {
+            }
+            
+            // 策略1.1：ID 包含 index 匹配（回退）
+            if (!isMatched) {
+                outer2@ for (group in trackGroups) {
+                    for (i in 0 until group.length) {
+                        val format = group.getTrackFormat(i)
+                        // ExoPlayer ID 格式可能是 "5:7" 或 "0:subs:Label"，检查是否包含目标 index
+                        if (format.id?.endsWith(":$targetIndex") == true || format.id == targetIndex) {
                     parametersBuilder.setOverrideForType(
                         TrackSelectionOverride(group.mediaTrackGroup, i)
                     )
                     isMatched = true
-                    Log.d(
-                        "Player",
-                        "Matched audio by Label (Fuzzy): Player=$formatLabel / Target=$targetLabel"
-                    )
-                    break@outer
-                }
-
-                // 4. 语言匹配（弱匹配）
-                if (!isMatched && targetLanguage != null && formatLang == targetLanguage) {
-                    parametersBuilder.setOverrideForType(
-                        TrackSelectionOverride(group.mediaTrackGroup, i)
-                    )
-                    isMatched = true
-                    Log.d("Player", "Matched audio by Language: $formatLang")
-                    break@outer
+                            Log.d("Player", "Matched subtitle by ID contains: ${format.id} -> Label:${format.label}")
+                            break@outer2
+                        }
+                    }
                 }
             }
         }
 
-        // 策略2：顺序匹配
-        if (!isMatched && targetOrdinalIndex != -1) {
+        // 策略2：顺序匹配（用于直接播放的内嵌字幕，不包含外置字幕）
+        if (!isMatched && !isLoadedViaConfig && targetOrdinalIndex >= 0) {
             var trackCounter = 0
             outerOrdinal@ for (group in trackGroups) {
                 for (i in 0 until group.length) {
@@ -824,10 +620,7 @@ fun PlayerScreen(
                         )
                         isMatched = true
                         val f = group.getTrackFormat(i)
-                        Log.d(
-                            "Player",
-                            "Matched audio by Ordinal: MetadataIndex=$targetIndex -> ExoOrdinal=$trackCounter (Label: ${f.label})"
-                        )
+                        Log.d("Player", "Matched subtitle by Ordinal: OrdinalIndex=$targetOrdinalIndex -> Track (ID:${f.id}, Label:${f.label})")
                         break@outerOrdinal
                     }
                     trackCounter++
@@ -835,21 +628,72 @@ fun PlayerScreen(
             }
         }
 
+        if (isMatched) {
         player.trackSelectionParameters = parametersBuilder.build()
+        } else {
+            Log.w("Player", "Unable to match subtitle: EmbyIndex=$targetIndex, OrdinalIndex=$targetOrdinalIndex, Label=$targetLabel")
+        }
+    }
 
-        if (!isMatched) {
-            Log.w("Player", "Unable to match audio target: $targetLabel")
-            Log.d("Player", "--- Dump Available Audio Tracks ---")
+    // 更新选中音频 - 使用顺序匹配（Emby音频列表的第一个对应轨道ID 1）
+    LaunchedEffect(selectedAudioIndex, audioTracks, currentTracks) {
+        if (audioTracks.isEmpty()) return@LaunchedEffect
+        if (selectedAudioIndex <= -1) return@LaunchedEffect
+
+        val targetTrack = audioTracks.find { it.index == selectedAudioIndex }
+            ?: run {
+                Log.w("Player", "Target audio index $selectedAudioIndex not found in metadata")
+                return@LaunchedEffect
+            }
+
+        // 获取在列表中的顺序位置（第一个音频对应轨道ID 1，即顺序0）
+        val targetOrdinalIndex = audioTracks.indexOf(targetTrack)
+        val targetLabel = targetTrack.displayTitle
+        val targetIndex = targetTrack.index?.toString() ?: ""
+
+        Log.d("Player", "Audio Selection: Target [EmbyIndex:$targetIndex, Label:$targetLabel, OrdinalIndex:$targetOrdinalIndex]")
+
+        var parametersBuilder = player.trackSelectionParameters.buildUpon()
+
+        val groups = currentTracks?.groups ?: player.currentTracks.groups
+        val trackGroups = groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+        var isMatched = false
+
+        // 打印可用音频轨道
+        Log.d("Player", "--- Available Audio Tracks ---")
+        var totalTracks = 0
             trackGroups.forEachIndexed { gi, group ->
                 for (i in 0 until group.length) {
                     val f = group.getTrackFormat(i)
-                    Log.d(
-                        "Player",
-                        "Group[$gi] Track[$i]: ID=${f.id}, Label=${f.label}, Lang=${f.language}"
-                    )
+                Log.d("Player", "Group[$gi] Track[$i]: ID=${f.id}, Label=${f.label}, Lang=${f.language}")
+                totalTracks++
+            }
+        }
+        Log.d("Player", "Total audio tracks: $totalTracks")
+
+        // 使用顺序匹配：音频列表的第一个对应轨道顺序0
+        if (targetOrdinalIndex >= 0) {
+            var trackCounter = 0
+            outerOrdinal@ for (group in trackGroups) {
+                for (i in 0 until group.length) {
+                    if (trackCounter == targetOrdinalIndex) {
+                        parametersBuilder.setOverrideForType(
+                            TrackSelectionOverride(group.mediaTrackGroup, i)
+                        )
+                        isMatched = true
+                        val f = group.getTrackFormat(i)
+                        Log.d("Player", "Matched audio by Ordinal: OrdinalIndex=$targetOrdinalIndex -> Track (ID:${f.id}, Label:${f.label})")
+                        break@outerOrdinal
+                    }
+                    trackCounter++
                 }
             }
-            Log.d("Player", "-----------------------------------")
+        }
+
+        if (isMatched) {
+            player.trackSelectionParameters = parametersBuilder.build()
+        } else {
+            Log.w("Player", "Unable to match audio: OrdinalIndex=$targetOrdinalIndex, Label=$targetLabel")
         }
     }
 
@@ -1051,20 +895,6 @@ fun PlayerScreen(
                 // 2. 更新缓存进度
                 buffered = player.bufferedPosition.coerceAtLeast(0L)
 
-                // 3. 时长更新由onTimelineChanged处理，这里只需要fallback
-                // if (duration <= 0) {
-                //     val rawDuration = player.duration
-                //     if (rawDuration > 0) {
-                //         duration = rawDuration
-                //     } else {
-                //         // Fallback to metadata duration
-                //         val source = media.mediaSources?.firstOrNull()
-                //         val runTimeTicks = source?.runTimeTicks ?: 0
-                //         if (runTimeTicks > 0) {
-                //             duration = runTimeTicks / 10000
-                //         }
-                //     }
-                // }
             }
 
             // 每 800 毫秒更新一次进度
@@ -1346,99 +1176,23 @@ fun PlayerScreen(
 
         // 4. Resume Buttons (从头开始 / 继续播放)
         if (showResumeButtons && playbackPositionTicks > 0) {
-            val continueButtonFocusRequester = remember { FocusRequester() }
-            
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.BottomEnd
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(bottom = 80.dp, end = 48.dp)
-                        .background(
-                            Color.Black.copy(alpha = 0.7f),
-                            RoundedCornerShape(12.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // 从头开始按钮
-                    Surface(
-                        onClick = {
-                            showResumeButtons = false
-                            player.seekTo(0)
-                            player.play()
-                        },
-                        modifier = Modifier.height(48.dp),
-                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
-                        border = ClickableSurfaceDefaults.border(
-                            border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))),
-                            focusedBorder = Border(BorderStroke(2.dp, Color.White))
-                        ),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color.White.copy(alpha = 0.1f),
-                            focusedContainerColor = Color.White.copy(alpha = 0.7f),
-                            contentColor = Color.White,
-                            focusedContentColor = Color.Black
-                        )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .padding(horizontal = 14.dp)
-                                .fillMaxHeight(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = stringResource(R.string.play_from_start),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-
-                    // 继续播放按钮
-                    Surface(
-                        onClick = {
-                            showResumeButtons = false
-                        },
-                        modifier = Modifier
-                            .height(48.dp)
-                            .focusRequester(continueButtonFocusRequester),
-                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
-                        border = ClickableSurfaceDefaults.border(
-                            border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))),
-                            focusedBorder = Border(BorderStroke(2.dp, Color.White))
-                        ),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color.White.copy(alpha = 0.1f),
-                            focusedContainerColor = Color.White.copy(alpha = 0.9f),
-                            contentColor = Color.White,
-                            focusedContentColor = Color.Black
-                        )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .padding(horizontal = 24.dp)
-                                .fillMaxHeight(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = stringResource(R.string.continue_playback),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
+            ResumePlaybackButtons(
+                countdownSeconds = 3,
+                onPlayFromStart = {
+                    showResumeButtons = false
+                    resumeButtonsShownOnce = true
+                    player.seekTo(0)
+                    player.play()
+                },
+                onContinue = {
+                    showResumeButtons = false
+                    resumeButtonsShownOnce = true
+                },
+                onTimeout = {
+                    showResumeButtons = false
+                    resumeButtonsShownOnce = true
                 }
-            }
-            
-            // 自动聚焦到继续播放按钮
-            LaunchedEffect(Unit) {
-                delay(100)
-                continueButtonFocusRequester.requestFocus()
-            }
+            )
         }
 
         // 5. Menu Dialog
@@ -1457,9 +1211,8 @@ fun PlayerScreen(
                 onAudioSelect = { index -> changeTrack(index, selectedSubtitleIndex) },
                 playbackCorrection = playbackCorrection,
                 onPlaybackCorrectionChange = {
+                    // 只对当前播放视频生效，不持久化保存
                     playbackCorrection = it
-                    val prefs = context.getSharedPreferences("emby_tv_prefs", Context.MODE_PRIVATE)
-                    prefs.edit().putInt("playback_correction", it).apply()
                 },
                 playMode = playMode,
                 onPlayModeChange = {

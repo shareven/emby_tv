@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">Emby TV</string>
-    <string name="new_version_available">新版本可用</string>
+    <string name="new_version_available">新版本可用: %1$s</string>
     <string name="info">信息</string>
     <string name="server_url">服务器地址</string>
     <string name="host">域名</string>

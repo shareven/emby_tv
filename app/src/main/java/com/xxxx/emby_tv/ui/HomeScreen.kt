@@ -20,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import com.xxxx.emby_tv.R
 import com.xxxx.emby_tv.data.repository.EmbyRepository
 import com.xxxx.emby_tv.ui.components.BuildItem
+import com.xxxx.emby_tv.ui.components.Loading
 import com.xxxx.emby_tv.ui.components.MenuDialog
 import com.xxxx.emby_tv.ui.components.NoData
 import com.xxxx.emby_tv.ui.components.TopStatusBar
@@ -92,80 +93,88 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(bottom = 40.dp)
-        ) {
-            // 我的媒体库
-            item {
-                MediaSection(
-                    title = stringResource(R.string.my_libraries),
-                    items = libraryLatestItems ?: emptyList(),
-                    isMyLibrary = true,
-                    serverUrl = serverUrl,
-                    onItemSelected = { item ->
-                        val firstItem = item.latestItems?.firstOrNull()
-                        val type = firstItem?.type ?: ""
-                        val id = item.id ?: ""
-                        val title = item.name ?: ""
-                        navController.navigate("library/$id?libraryName=$title&type=$type")
-                    },
-                    onMenuPressed = { showMenu = true }
-                )
-            }
-
-            // 继续观看
-           if(resumeItems != null && resumeItems.isNotEmpty()) item {
-                MediaSection(
-                    title = stringResource(R.string.continue_watching),
-                    items = resumeItems ,
-                    isShowImg17 = true,
-                    isContinueWatching = true,
-                    serverUrl = serverUrl,
-                    onItemSelected = { item -> goPlay(item) },
-                    onMenuPressed = { showMenu = true }
-                )
-            }
-
-            // 收藏
-            if (favoriteItems != null && favoriteItems.isNotEmpty()) {
+        // 数据未加载完成时显示 Loading 组件
+        // 使用 libraryLatestItems == null 判断首次加载，避免与应用初始化 Loading 重叠
+        if (libraryLatestItems == null) {
+//            Loading(modifier = Modifier.weight(1f))
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(bottom = 40.dp)
+            ) {
+                // 我的媒体库
                 item {
                     MediaSection(
-                        title = stringResource(R.string.favorite),
-                        items = favoriteItems,
-                        isShowImg17 = true,
+                        title = stringResource(R.string.my_libraries),
+                        items = libraryLatestItems ?: emptyList(),
+                        isMyLibrary = true,
                         serverUrl = serverUrl,
-                        onItemSelected = { item -> goPlay(item) },
+                        onItemSelected = { item ->
+                            val firstItem = item.latestItems?.firstOrNull()
+                            val type = firstItem?.type ?: ""
+                            val id = item.id ?: ""
+                            val title = item.name ?: ""
+                            navController.navigate("library/$id?libraryName=$title&type=$type")
+                        },
                         onMenuPressed = { showMenu = true }
                     )
                 }
-            }
 
-            // 各库最新内容
-            itemsIndexed(
-                libraryLatestItems ?: emptyList(),
-                key = { _, library -> library.id ?: library.hashCode() }
-            ) { _, library ->
-                MediaSection(
-                    title = library.name ?: "",
-                    items = library.latestItems ?: emptyList(),
-                    serverUrl = serverUrl,
-                    onItemSelected = { item ->
-                        if (item.isSeries) {
-                            val seriesId = item.id
-                            if (!seriesId.isNullOrEmpty()) {
-                                homeViewModel.playNextUp(seriesId) { nextItem: BaseItemDto ->
-                                    goPlay(nextItem)
+                // 继续观看
+                if (resumeItems != null && resumeItems.isNotEmpty()) {
+                    item {
+                        MediaSection(
+                            title = stringResource(R.string.continue_watching),
+                            items = resumeItems,
+                            isShowImg17 = true,
+                            isContinueWatching = true,
+                            serverUrl = serverUrl,
+                            onItemSelected = { item -> goPlay(item) },
+                            onMenuPressed = { showMenu = true }
+                        )
+                    }
+                }
+
+                // 收藏
+                if (favoriteItems != null && favoriteItems.isNotEmpty()) {
+                    item {
+                        MediaSection(
+                            title = stringResource(R.string.favorite),
+                            items = favoriteItems,
+                            isShowImg17 = true,
+                            serverUrl = serverUrl,
+                            onItemSelected = { item -> goPlay(item) },
+                            onMenuPressed = { showMenu = true }
+                        )
+                    }
+                }
+
+                // 各库最新内容
+                itemsIndexed(
+                    libraryLatestItems ?: emptyList(),
+                    key = { _, library -> library.id ?: library.hashCode() }
+                ) { _, library ->
+                    MediaSection(
+                        title = library.name ?: "",
+                        items = library.latestItems ?: emptyList(),
+                        serverUrl = serverUrl,
+                        onItemSelected = { item ->
+                            if (item.isSeries) {
+                                val seriesId = item.id
+                                if (!seriesId.isNullOrEmpty()) {
+                                    homeViewModel.playNextUp(seriesId) { nextItem: BaseItemDto ->
+                                        goPlay(nextItem)
+                                    }
+                                } else {
+                                    goPlay(item)
                                 }
                             } else {
                                 goPlay(item)
                             }
-                        } else {
-                            goPlay(item)
-                        }
-                    },
-                    onMenuPressed = { showMenu = true }
-                )
+                        },
+                        onMenuPressed = { showMenu = true }
+                    )
+                }
             }
         }
     }

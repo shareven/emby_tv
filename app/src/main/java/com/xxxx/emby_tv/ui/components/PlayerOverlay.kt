@@ -101,12 +101,6 @@ fun PlayerOverlay(
                     fontWeight = FontWeight.Bold
                 )
             )
-            // debug
-            Text(
-                text = "isCurrentMediaItemSeekable:${player.isCurrentMediaItemSeekable} ${player.duration}",
-                style = TvMaterialTheme.typography.titleMedium.copy(color = Color.White)
-            )
-            // debug
 
             Spacer(modifier = Modifier.height(12.dp))
             if (parentIndex != null && index != null) {
@@ -264,19 +258,7 @@ fun PlayerOverlay(
                 horizontalArrangement = Arrangement.Center,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(
-                    Icons.Default.Menu,
-                    contentDescription = null,
-                    tint = Color.LightGray,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = stringResource(R.string.press_menu_to_show_menu),
-                    color = Color.LightGray,
-                    fontSize = 14.sp
-                )
-                Spacer(modifier = Modifier.width(16.dp))
+
                 Icon(
                     Icons.Default.KeyboardArrowDown,
                     contentDescription = null,
