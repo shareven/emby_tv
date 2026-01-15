@@ -11,9 +11,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.xxxx.emby_tv.model.BaseItemDto
-import com.xxxx.emby_tv.model.MediaDto
-import com.xxxx.emby_tv.model.SessionDto
+import com.xxxx.emby_tv.data.local.PreferencesManager
+import com.xxxx.emby_tv.data.remote.EmbyApi
+import com.xxxx.emby_tv.data.repository.EmbyRepository
+import com.xxxx.emby_tv.data.session.SessionManager
+import com.xxxx.emby_tv.data.model.BaseItemDto
+import com.xxxx.emby_tv.data.model.MediaDto
+import com.xxxx.emby_tv.data.model.SessionDto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
@@ -23,29 +27,27 @@ import kotlin.collections.ifEmpty
 
 /**
  * 应用状态管理类
-关于 ViewModelScope 的位置（核心逻辑）
-appModel 在最上层，：
-UI 触发的异步任务（如：点击按钮开始登录）：写在 viewModelScope.launch 里。
-被动的数据同步（如：播放器上报进度）：写在 suspend 里
+ * 
+ * 注意：此类现在是过渡层，内部委托给新的 Repository 和 SessionManager
+ * 在完成迁移后，各 Screen 应该直接使用各自的 ViewModel
  */
 class AppModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs: SharedPreferences =
         application.getSharedPreferences("emby_tv", Context.MODE_PRIVATE)
+    
+    // 新的数据层
+    private val repository = EmbyRepository.getInstance(application)
+    private val session = SessionManager.getInstance(application)
+    private val prefsManager = PreferencesManager(application)
 
-    private var embyService: EmbyService? = null
+    // === 状态变量（从 SessionManager 代理）===
 
-
-    // 状态变量
-
-    var serverUrl by mutableStateOf<String?>(null)
-        private set
-    var apiKey by mutableStateOf<String?>(null)
-        private set
-    var userId by mutableStateOf<String?>(null)
-        private set
-    var deviceId by mutableStateOf("")
-        private set
+    val serverUrl: String? get() = session.serverUrl
+    val apiKey: String? get() = session.apiKey
+    val userId: String? get() = session.userId
+    val deviceId: String get() = session.deviceId
+    
     var isLoaded by mutableStateOf(false)
         private set
 
@@ -62,7 +64,6 @@ class AppModel(application: Application) : AndroidViewModel(application) {
     var favoriteItems by mutableStateOf<List<BaseItemDto>?>(null)
         private set
 
-
     var libraryItems by mutableStateOf<List<BaseItemDto>?>(null)
         private set
 
@@ -74,12 +75,12 @@ class AppModel(application: Application) : AndroidViewModel(application) {
         private set
 
     // 主题色相关
-    var currentThemeId by mutableStateOf("purple") // 默认主题ID
+    var currentThemeId by mutableStateOf("purple")
         private set
 
     // 登录状态判断
     val isLoggedIn: Boolean
-        get() = !apiKey.isNullOrEmpty() && !userId.isNullOrEmpty()
+        get() = repository.isLoggedIn
 
     val needUpdate: Boolean
         get() {
@@ -88,33 +89,20 @@ class AppModel(application: Application) : AndroidViewModel(application) {
         }
 
     // Saved Credentials Accessors
-    val savedServerUrl: String?
-        get() = prefs.getString("serverUrl", null)
-    val savedUsername: String
-        get() = prefs.getString("username", "") ?: ""
-    val savedPassword: String
-        get() = prefs.getString("password", "") ?: ""
+    val savedServerUrl: String? get() = repository.savedServerUrl
+    val savedUsername: String get() = repository.savedUsername
+    val savedPassword: String get() = repository.savedPassword
 
     init {
         loadCredentials()
-        loadThemeId() // 加载保存的主题色
-    }
-
-
-    // 内部使用的辅助函数，确保 service 已初始化
-    private fun getService(): EmbyService {
-        return embyService ?: EmbyService(getApplication(), serverUrl!!, apiKey!!, deviceId).also {
-            embyService = it
-        }
+        loadThemeId()
     }
 
     // 对应 Flutter 的 checkUpdate
     fun checkUpdate() {
-        // 如果已经获取过新版本，直接返回
         if (newVersion.isNotEmpty()) return
 
         viewModelScope.launch {
-            // 1. 获取当前版本号 (类似 PackageInfo.fromPlatform)
             val context = getApplication<Application>().applicationContext
             val version = try {
                 val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -123,6 +111,7 @@ class AppModel(application: Application) : AndroidViewModel(application) {
                         PackageManager.PackageInfoFlags.of(0)
                     )
                 } else {
+                    @Suppress("DEPRECATION")
                     context.packageManager.getPackageInfo(context.packageName, 0)
                 }
                 "v${packageInfo.versionName}"
@@ -132,10 +121,9 @@ class AppModel(application: Application) : AndroidViewModel(application) {
 
             currentVersion = version
 
-            // 2. 网络请求获取新版本 (切换到 IO 线程)
             try {
                 val res = withContext(Dispatchers.IO) {
-                    EmbyService.getNewVersion(context)
+                    EmbyApi.getNewVersion(context)
                 }
 
                 val tagName = res.safeGetString("tag_name") ?: ""
@@ -148,7 +136,6 @@ class AppModel(application: Application) : AndroidViewModel(application) {
                 newVersion = tagName
 
             } catch (e: Exception) {
-                // 处理网络异常
                 e.printStackTrace()
             }
         }
@@ -159,40 +146,17 @@ class AppModel(application: Application) : AndroidViewModel(application) {
      */
     fun loadCredentials() {
         viewModelScope.launch {
-            val savedServerUrl = prefs.getString("serverUrl", null)
-            val savedApiKey = prefs.getString("apiKey", null)
-            val savedUserId = prefs.getString("userId", null)
-
-            getDeviceId()
-            // 验证本地凭证有效性
-            if (savedServerUrl != null && savedApiKey != null && savedUserId != null) {
-                try {
-                    val service = EmbyService(getApplication(), savedServerUrl, "", deviceId)
-                    val isValid = service.testKey(savedUserId, savedApiKey)
-                    Log.e("testKey isValid",isValid.toString())
-                    if ( isValid) {
-                        serverUrl = savedServerUrl
-                        apiKey = savedApiKey
-                        userId = savedUserId
-
-                        // 加载用户数据
-                        loadData()
-                    } else {
-                        // 清除无效凭证
-                        clearCredentials()
-                        isLoaded = true
-                    }
-                } catch (e: Exception) {
-                    // 凭证验证失败，但不清除，可能是网络问题
-                    serverUrl = savedServerUrl
-                    apiKey = savedApiKey
-                    userId = savedUserId
+            try {
+                val loaded = repository.loadCredentials()
+                if (loaded && repository.isLoggedIn) {
+                    loadData()
+                } else {
                     isLoaded = true
                 }
-            }else {
+            } catch (e: Exception) {
+                e.printStackTrace()
                 isLoaded = true
             }
-
         }
     }
 
@@ -202,35 +166,29 @@ class AppModel(application: Application) : AndroidViewModel(application) {
     fun loadData() {
         viewModelScope.launch {
             try {
-                // 检查必要的参数是否存在
-                if (serverUrl == null || apiKey == null || userId == null) {
+                if (!repository.isLoggedIn) {
                     resumeItems = emptyList()
                     libraryLatestItems = emptyList()
-                    
                     return@launch
                 }
 
-                // Parallel execution for better performance
                 val deferredResume = async(Dispatchers.IO) {
-                    getService().getResumeItems(userId!!)
+                    repository.getResumeItems()
                 }
                 val deferredLatest = async(Dispatchers.IO) {
-                    getService().getLatestItems(userId!!)
+                    repository.getLatestItems()
                 }
                 val deferredFavorites = async(Dispatchers.IO) {
-                    getService().getFavoriteItems(userId!!)
+                    repository.getFavoriteItems()
                 }
 
                 resumeItems = deferredResume.await()
                 libraryLatestItems = deferredLatest.await()
                 favoriteItems = deferredFavorites.await()
             } catch (e: Exception) {
-                // 处理数据加载错误，设置默认值防止闪退
                 resumeItems = emptyList()
                 libraryLatestItems = emptyList()
                 favoriteItems = emptyList()
-                favoriteItems = emptyList()
-                // 可以在这里添加日志记录
                 e.printStackTrace()
             } finally {
                 isLoaded = true
@@ -238,39 +196,34 @@ class AppModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-
     /**
-     * 加载媒体库项目 - 与Flutter版本保持一致，必须传入type参数
+     * 加载媒体库项目
      */
     fun loadLibraryItems(parentId: String, type: String) {
         viewModelScope.launch {
             try {
-
-                libraryItems = null // If they are same
+                libraryItems = null
 
                 val items = withContext(Dispatchers.IO) {
-                    getService().getLibraryList(userId!!,parentId, type)
+                    repository.getLibraryList(parentId, type)
                 }
                 libraryItems = items
             } catch (e: Exception) {
-                // 处理错误
                 libraryItems = emptyList()
             }
         }
     }
 
-
-
     /**
-     * 切换收藏状态 - 简化版，只发送请求，不关心结果
+     * 切换收藏状态
      */
     fun toggleFavorite(itemId: String, isFavorite: Boolean) {
         viewModelScope.launch {
             try {
                 if (isFavorite) {
-                    getService().addToFavorites(userId!!, itemId)
+                    repository.addToFavorites(itemId)
                 } else {
-                    getService().removeFromFavorites(userId!!,itemId)
+                    repository.removeFromFavorites(itemId)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -278,32 +231,11 @@ class AppModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun getDeviceId() {
-        var id = prefs.getString("deviceId", null)
-        if (id == null) {
-            id = "kotlin_tv_${System.currentTimeMillis()}"
-            prefs.edit().putString("deviceId", id).apply()
-        }
-        deviceId = id ?: ""
-    }
-
-    private fun clearCredentials() {
-        prefs.edit().apply {
-            remove("apiKey")
-            remove("userId")
-            apply()
-        }
-        apiKey = null
-        userId = null
-        serverUrl = null
-        embyService = null
-    }
-
     /**
      * 退出登录
      */
     fun logout() {
-        clearCredentials()
+        repository.logout()
         resumeItems = emptyList()
         libraryLatestItems = emptyList()
         favoriteItems = emptyList()
@@ -316,26 +248,7 @@ class AppModel(application: Application) : AndroidViewModel(application) {
         isLoading = true
         viewModelScope.launch {
             try {
-                val service = EmbyService(getApplication(), serverUrl, "", deviceId)
-                val authResult = withContext(Dispatchers.IO) {
-                    service.authenticate(username, password)
-                }
-
-                this@AppModel.serverUrl = serverUrl
-                apiKey = authResult.accessToken  // 使用accessToken作为API密钥
-                userId = authResult.user?.id ?: ""  // 使用用户ID
-
-                // 保存凭证
-                prefs.edit().apply {
-                    putString("serverUrl", serverUrl)
-                    putString("apiKey", apiKey)
-                    putString("userId", userId)
-                    putString("username", username)
-                    putString("password", password)
-                    apply()
-                }
-                embyService = EmbyService(getApplication(), serverUrl, apiKey!!, deviceId)
-
+                repository.login(serverUrl, username, password)
                 loadData()
                 onResult(true)
             } catch (e: Exception) {
@@ -343,39 +256,39 @@ class AppModel(application: Application) : AndroidViewModel(application) {
                 onResult(false)
             } finally {
                 withContext(Dispatchers.Main) {
-                   isLoading = false
+                    isLoading = false
                 }
             }
         }
     }
 
-    // --- Helper methods to call EmbyService ---
+    // === Helper methods ===
 
     suspend fun getSeasonList(seriesId: String): List<BaseItemDto> {
-        return getService().getSeasonList(userId!!, seriesId)
+        return repository.getSeasonList(seriesId)
     }
 
     suspend fun getSeriesList(parentId: String): List<BaseItemDto> {
-        return getService().getSeriesList(userId!!, parentId)
+        return repository.getSeriesList(parentId)
     }
 
     suspend fun getResumeItem(seriesId: String): BaseItemDto? {
-        return getService().getResumeItems(userId!!, seriesId).firstOrNull()
+        return repository.getResumeItems(seriesId).firstOrNull()
     }
 
     suspend fun getShowsNextUp(seriesId: String): List<BaseItemDto> {
-        return getService().getShowsNextUp(userId!!, seriesId)
+        return repository.getShowsNextUp(seriesId)
     }
 
-
-    fun playNextUp(seriesId: String,onBack:(item: BaseItemDto)-> Unit) {
+    fun playNextUp(seriesId: String, onBack: (item: BaseItemDto) -> Unit) {
         viewModelScope.launch {
             val itemsArray = getShowsNextUp(seriesId)
-            // 2. 逻辑判断：如果 Items 为空，则去请求 SeriesList (对应 Flutter 的 items.isEmpty)
             val items = itemsArray.ifEmpty {
                 getSeriesList(seriesId)
             }
-            onBack(items.first())
+            if (items.isNotEmpty()) {
+                onBack(items.first())
+            }
         }
     }
 
@@ -384,7 +297,7 @@ class AppModel(application: Application) : AndroidViewModel(application) {
             try {
                 currentMediaInfo = null
                 val info = withContext(Dispatchers.IO) {
-                    getService().getMediaInfo(userId!!, id)
+                    repository.getMediaInfo(id)
                 }
                 currentMediaInfo = info
             } catch (e: Exception) {
@@ -395,68 +308,71 @@ class AppModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun getMediaInfo(id: String): BaseItemDto {
-        return getService().getMediaInfo(userId!!, id)
+        return repository.getMediaInfo(id)
     }
 
     suspend fun getPlaybackInfo(
         id: String,
         playbackPositionTicks: Long,
-        selectedAudioIndex: Int?=null,
-        selectedSubtitleIndex: Int?=null,
+        selectedAudioIndex: Int? = null,
+        selectedSubtitleIndex: Int? = null,
         disableHevc: Boolean = false
     ): MediaDto {
-        return getService().getPlaybackInfo(userId!!, id, playbackPositionTicks,selectedAudioIndex, selectedSubtitleIndex, disableHevc)
+        return repository.getPlaybackInfo(
+            id,
+            playbackPositionTicks,
+            selectedAudioIndex,
+            selectedSubtitleIndex,
+            disableHevc
+        )
     }
-    
-     fun reportPlaybackProgress(body: Any) {
+
+    fun reportPlaybackProgress(body: Any) {
         viewModelScope.launch(Dispatchers.IO) {
             withContext(NonCancellable) {
-                 getService().reportPlaybackProgress(body)
+                repository.reportPlaybackProgress(body)
             }
         }
     }
 
-     fun playing(body: Any) {
-      viewModelScope.launch(Dispatchers.IO) {
+    fun playing(body: Any) {
+        viewModelScope.launch(Dispatchers.IO) {
             withContext(NonCancellable) {
-                 getService().playing(body)
+                repository.playing(body)
             }
         }
     }
 
-      fun stopped(body: Any) {
+    fun stopped(body: Any) {
         viewModelScope.launch(Dispatchers.IO) {
             withContext(NonCancellable) {
-                  getService().stopped(body)
+                repository.stopped(body)
             }
         }
     }
 
     fun stopActiveEncodings(playSessionId: String? = null) {
         viewModelScope.launch(Dispatchers.IO) {
-            getService().stopActiveEncodings(playSessionId)
+            repository.stopActiveEncodings(playSessionId)
         }
     }
 
     suspend fun getPlayingSessions(): List<SessionDto> {
-      return  getService().getPlayingSessions()
+        return repository.getPlayingSessions()
     }
 
     /**
-     * 保存主题色ID到SharedPreferences
+     * 保存主题色ID
      */
     fun saveThemeId(themeId: String) {
-        prefs.edit().putString("selected_theme_id", themeId).apply()
+        prefsManager.themeId = themeId
         currentThemeId = themeId
     }
 
     /**
-     * 从SharedPreferences加载主题色ID
+     * 加载主题色ID
      */
     private fun loadThemeId() {
-        val savedThemeId = prefs.getString("selected_theme_id", "purple") ?: "purple"
-        currentThemeId = savedThemeId
+        currentThemeId = prefsManager.themeId
     }
-
-
 }

@@ -1,42 +1,24 @@
 package com.xxxx.emby_tv.ui
 
 import android.app.Activity
-import android.content.*
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.Build
-import android.os.Environment
-import android.provider.Settings
-import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import androidx.tv.material3.*
-import com.xxxx.emby_tv.AppModel
 import com.xxxx.emby_tv.AppUpdateManager
 import com.xxxx.emby_tv.R
 import com.xxxx.emby_tv.ui.components.Loading
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.*
-import java.net.HttpURLConnection
-import java.net.URL
+import com.xxxx.emby_tv.ui.viewmodel.UpdateViewModel
 
 @Composable
 fun UpdateScreen(
-    appModel: AppModel,
+    updateViewModel: UpdateViewModel,
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -46,12 +28,12 @@ fun UpdateScreen(
     var isDownloading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
 
-    LaunchedEffect(appModel.downloadUrl) {
-        if (appModel.downloadUrl.isNotEmpty() && !isDownloading) {
+    LaunchedEffect(updateViewModel.downloadUrl) {
+        if (updateViewModel.downloadUrl.isNotEmpty() && !isDownloading) {
             isDownloading = true
 
             updateManager.startUpdate(
-                downloadUrl = appModel.downloadUrl,
+                downloadUrl = updateViewModel.downloadUrl,
                 onProgress = { progress ->
                     if (progress > 0) {
                         downloadProgress = progress
@@ -65,11 +47,8 @@ fun UpdateScreen(
                     errorMessage = error
                 }
             )
-
         }
-
     }
-
 
     Column(
         modifier = Modifier
@@ -103,12 +82,10 @@ fun UpdateScreen(
             ) {
                 val width = size.width
                 val height = size.height
-                // 绘制背景
                 drawRect(color = trackColor, size = size)
-                // 绘制进度（无任何额外偏移或点）
                 drawRect(
                     color = color,
-                    size = size.copy(width = width * downloadProgress/100)
+                    size = size.copy(width = width * downloadProgress / 100)
                 )
             }
             if (errorMessage.isNotEmpty()) Text(
@@ -123,8 +100,5 @@ fun UpdateScreen(
         }
 
         Spacer(modifier = Modifier.height(32.dp))
-
-
     }
-
 }

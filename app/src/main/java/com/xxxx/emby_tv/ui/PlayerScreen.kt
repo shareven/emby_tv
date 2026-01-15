@@ -16,9 +16,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.tv.material3.MaterialTheme as TvMaterialTheme
 import androidx.tv.material3.*
-import androidx.compose.material3.Icon // Explicit import for Icon if using material3 Icon
-// Or use androidx.tv.material3.Icon if available, but usually it's compatible.
-// If ambiguity persists, use fully qualified names or aliases.
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,21 +50,22 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
-import com.xxxx.emby_tv.AppModel
 import com.xxxx.emby_tv.R
 import com.xxxx.emby_tv.Utils
 import com.xxxx.emby_tv.Utils.formatDuration
 import com.xxxx.emby_tv.Utils.formatKbps
 import com.xxxx.emby_tv.Utils.formatMbps
-import com.xxxx.emby_tv.model.BaseItemDto
-import com.xxxx.emby_tv.model.MediaDto
-import com.xxxx.emby_tv.model.MediaSourceInfoDto
-import com.xxxx.emby_tv.model.MediaStreamDto
-import com.xxxx.emby_tv.model.SessionDto
+import com.xxxx.emby_tv.data.repository.EmbyRepository
+import com.xxxx.emby_tv.data.model.BaseItemDto
+import com.xxxx.emby_tv.data.model.MediaDto
+import com.xxxx.emby_tv.data.model.MediaSourceInfoDto
+import com.xxxx.emby_tv.data.model.MediaStreamDto
+import com.xxxx.emby_tv.data.model.SessionDto
 import com.xxxx.emby_tv.ui.components.PlayerMenu
 import com.xxxx.emby_tv.ui.components.PlayerOverlay
 import com.xxxx.emby_tv.ui.components.getAudioTrack
 import com.xxxx.emby_tv.ui.components.getVideoTrack
+import com.xxxx.emby_tv.ui.viewmodel.PlayerViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -74,12 +73,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 播放器界面（Screen）- 对应Flutter中的player_screen.dart
+ * 播放器界面（Screen）- 使用 PlayerViewModel
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun PlayerScreen(
-    appModel: AppModel,
+    playerViewModel: PlayerViewModel,
     mediaId: String,
     playbackPositionTicks: Long = 0L,
     onPlaybackStateChanged: (isPlaying: Boolean) -> Unit = {},
@@ -88,7 +87,11 @@ fun PlayerScreen(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
-
+    
+    // 获取 Repository 用于直接访问
+    val repository = remember { EmbyRepository.getInstance(context) }
+    val serverUrl = repository.serverUrl ?: ""
+    val apiKey = repository.apiKey ?: ""
 
     // 使用 rememberCoroutineScope() 替代 GlobalScope，确保协程可取消
     val scope = rememberCoroutineScope()
@@ -206,7 +209,13 @@ fun PlayerScreen(
         )
        
         // 2. 执行停止报告
-        appModel.stopped(body)
+        scope.launch(Dispatchers.IO) {
+            try {
+                repository.stopped(body)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
 
@@ -268,11 +277,11 @@ fun PlayerScreen(
 
             try {
                 if (media.mediaSources?.firstOrNull()?.transcodingUrl != null) {
-                    appModel.stopActiveEncodings(
+                    repository.stopActiveEncodings(
                         media.playSessionId
                     )
                 }
-                val mediaResult = appModel.getPlaybackInfo(
+                val mediaResult = repository.getPlaybackInfo(
                     mediaId,
                     if (position > 0) position * 10000 else playbackPositionTicks,
                     requestAudioIndex,
@@ -292,7 +301,7 @@ fun PlayerScreen(
                 val path = source?.directStreamUrl ?: source?.transcodingUrl
 
                 if (path != null) {
-                    val newVideoUrl = "${appModel.serverUrl}/emby$path"
+                    val newVideoUrl = "${serverUrl}/emby$path"
 
                     // 切换到主线程更新UI
                     withContext(Dispatchers.Main) {
@@ -352,11 +361,11 @@ fun PlayerScreen(
 
         try {
             if (media.mediaSources?.firstOrNull()?.transcodingUrl != null) {
-                appModel.stopActiveEncodings(
+                repository.stopActiveEncodings(
                     media.playSessionId
                 )
             }
-            val mediaResult = appModel.getPlaybackInfo(
+            val mediaResult = repository.getPlaybackInfo(
                 mediaId,
                 if (position > 0) position * 10000 else playbackPositionTicks,
                 requestAudioIndex,
@@ -377,7 +386,7 @@ fun PlayerScreen(
 
             // 直接使用 mediaResult 对象，赋值给状态
             media = mediaResult
-            val mediaInfoResult = appModel.getMediaInfo(mediaId)
+            val mediaInfoResult = repository.getMediaInfo(mediaId)
             mediaInfo = mediaInfoResult
 
             // 更新收藏状态
@@ -457,7 +466,7 @@ fun PlayerScreen(
                 }
             }
 
-            videoUrl = if (path != null) "${appModel.serverUrl}/emby$path" else null
+            videoUrl = if (path != null) "${serverUrl}/emby$path" else null
             hasReportedPlaying = false
         } catch (e: Exception) {
             e.printStackTrace()
@@ -488,7 +497,7 @@ fun PlayerScreen(
                     // 构建字幕 URL
                     // 即使是内置字幕，也可以通过此 API 提取 (Stream.srt, Stream.vtt 等)
                     val subUrl =
-                        "${appModel.serverUrl}/emby/Videos/$mediaId/$mediaSourceId/Subtitles/$index/Stream.$codec?api_key=${appModel.apiKey}"
+                        "${serverUrl}/emby/Videos/$mediaId/$mediaSourceId/Subtitles/$index/Stream.$codec?api_key=${apiKey}"
 
                     val mimeType = when {
                         codec.contains("ass") || codec.contains("ssa") -> MimeTypes.TEXT_SSA
@@ -845,7 +854,7 @@ fun PlayerScreen(
             val seriesId = mediaInfo.seriesId
             if (seriesId != null) {
                 try {
-                    val list = appModel.getSeriesList(seriesId)
+                    val list = repository.getSeriesList(seriesId)
 
                     @Suppress("UNCHECKED_CAST")
                     val episodes = list
@@ -901,7 +910,7 @@ fun PlayerScreen(
                             "EventName" to "TimeUpdate"
                         )
 
-                        appModel.reportPlaybackProgress(body)
+                        repository.reportPlaybackProgress(body)
                     }
 
                     tickCount++
@@ -943,7 +952,7 @@ fun PlayerScreen(
                     "CanSeek" to true,
                     "ItemId" to (source?.itemId ?: mediaId)
                 )
-                appModel.playing(body)
+                repository.playing(body)
                 hasReportedPlaying = true
             } catch (e: Exception) {
                 Log.e("PlayerSession", "Failed to report playing", e)
@@ -964,7 +973,7 @@ fun PlayerScreen(
                 // Delay waiting for server to process playing report (500ms initial + retry interval)
                 delay(1200)
 
-                val sessions = appModel.getPlayingSessions()
+                val sessions = repository.getPlayingSessions()
                 val source =
                     media.mediaSources?.firstOrNull()
                 val mediaSourceId = source?.id
@@ -1129,7 +1138,6 @@ fun PlayerScreen(
             player.removeListener(listener)
             player.setVideoSurface(null)
             player.release()
-            appModel.loadData()
         }
     }
 
@@ -1341,10 +1349,21 @@ fun PlayerScreen(
                 onToggleFavorite = {
                     isFavorite = !isFavorite
                     if (mediaInfo.id != null) {
-                        appModel.toggleFavorite(mediaInfo.id!!, isFavorite)
+                        scope.launch(Dispatchers.IO) {
+                            try {
+                                if (isFavorite) {
+                                    repository.addToFavorites(mediaInfo.id!!)
+                                } else {
+                                    repository.removeFromFavorites(mediaInfo.id!!)
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
                     }
                 },
-                appModel = appModel,
+                serverUrl = serverUrl,
+                repository = repository,
                 onNavigateToPlayer = onNavigateToPlayer
             )
         }

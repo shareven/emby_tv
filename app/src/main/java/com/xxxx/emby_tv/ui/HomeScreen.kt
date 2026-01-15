@@ -1,13 +1,10 @@
 package com.xxxx.emby_tv.ui
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -18,37 +15,49 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.tv.material3.*
-import com.xxxx.emby_tv.AppModel
-import com.xxxx.emby_tv.model.BaseItemDto
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Menu
+import com.xxxx.emby_tv.data.model.BaseItemDto
 import androidx.compose.ui.res.stringResource
 import com.xxxx.emby_tv.R
+import com.xxxx.emby_tv.data.repository.EmbyRepository
 import com.xxxx.emby_tv.ui.components.BuildItem
 import com.xxxx.emby_tv.ui.components.MenuDialog
 import com.xxxx.emby_tv.ui.components.NoData
 import com.xxxx.emby_tv.ui.components.TopStatusBar
+import com.xxxx.emby_tv.ui.viewmodel.HomeViewModel
+import com.xxxx.emby_tv.ui.viewmodel.MainViewModel
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    appModel: AppModel,
+    homeViewModel: HomeViewModel,
+    mainViewModel: MainViewModel,
     navController: NavController,
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
     var showMenu by remember { mutableStateOf(false) }
+    
+    // 获取 serverUrl
+    val repository = remember { EmbyRepository.getInstance(context) }
+    val serverUrl = repository.serverUrl ?: ""
 
+    // 从 HomeViewModel 获取数据
+    val resumeItems = homeViewModel.resumeItems
+    val libraryLatestItems = homeViewModel.libraryLatestItems
+    val favoriteItems = homeViewModel.favoriteItems
+    val isLoading = homeViewModel.isLoading
+
+    // 检查更新
     LaunchedEffect(Unit) {
-        appModel.checkUpdate()
+        mainViewModel.checkUpdate()
     }
 
+    // 菜单对话框
     if (showMenu) {
         MenuDialog(
-            needUpdate = appModel.needUpdate,
+            needUpdate = mainViewModel.needUpdate,
             onDismiss = { showMenu = false },
             onLogout = {
-                appModel.logout()
+                mainViewModel.logout()
                 showMenu = false
             },
             onUpdate = {
@@ -56,7 +65,7 @@ fun HomeScreen(
                 navController.navigate("update")
             },
             onThemeChange = { themeColor ->
-                appModel.saveThemeId(themeColor.id)
+                mainViewModel.saveThemeId(themeColor.id)
             }
         )
     }
@@ -65,22 +74,20 @@ fun HomeScreen(
         val id = item.id ?: ""
         val userData = item.userData
         val position = userData?.playbackPositionTicks ?: 0L
-
         navController.navigate("player/$id?position=$position")
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // 顶部状态栏
         TopStatusBar(
-            currentVersion = appModel.currentVersion,
-            newVersion = appModel.newVersion,
-            needUpdate = appModel.needUpdate
+            currentVersion = mainViewModel.currentVersion,
+            newVersion = mainViewModel.newVersion,
+            needUpdate = mainViewModel.needUpdate
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
-
-        if (appModel.isLoaded) LazyColumn(
+        LazyColumn(
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(bottom = 40.dp)
         ) {
@@ -88,18 +95,17 @@ fun HomeScreen(
             item {
                 MediaSection(
                     title = stringResource(R.string.my_libraries),
-                    items = appModel.libraryLatestItems ?: emptyList(),
+                    items = libraryLatestItems ?: emptyList(),
                     isMyLibrary = true,
+                    serverUrl = serverUrl,
                     onItemSelected = { item ->
                         val firstItem = item.latestItems?.firstOrNull()
                         val type = firstItem?.type ?: ""
-
                         val id = item.id ?: ""
                         val title = item.name ?: ""
                         navController.navigate("library/$id?libraryName=$title&type=$type")
                     },
-                    onMenuPressed = { showMenu = true },
-                    appModel = appModel
+                    onMenuPressed = { showMenu = true }
                 )
             }
 
@@ -107,39 +113,43 @@ fun HomeScreen(
             item {
                 MediaSection(
                     title = stringResource(R.string.continue_watching),
-                    items = appModel.resumeItems ?: emptyList(),
+                    items = resumeItems ?: emptyList(),
                     isShowImg17 = true,
                     isContinueWatching = true,
+                    serverUrl = serverUrl,
                     onItemSelected = { item -> goPlay(item) },
-                    onMenuPressed = { showMenu = true },
-                    appModel = appModel
+                    onMenuPressed = { showMenu = true }
                 )
             }
 
             // 收藏
-            if (appModel.favoriteItems != null && appModel.favoriteItems!!.isNotEmpty()) item {
-                MediaSection(
-                    title = stringResource(R.string.favorite),
-                    items = appModel.favoriteItems ?: emptyList(),
-                    isShowImg17 = true,
-                    onItemSelected = { item -> goPlay(item) },
-                    onMenuPressed = { showMenu = true },
-                    appModel = appModel
-                )
+            if (favoriteItems != null && favoriteItems.isNotEmpty()) {
+                item {
+                    MediaSection(
+                        title = stringResource(R.string.favorite),
+                        items = favoriteItems,
+                        isShowImg17 = true,
+                        serverUrl = serverUrl,
+                        onItemSelected = { item -> goPlay(item) },
+                        onMenuPressed = { showMenu = true }
+                    )
+                }
             }
 
             // 各库最新内容
             itemsIndexed(
-                appModel.libraryLatestItems ?: emptyList(),
-                key = { _, library -> library.id ?: library.hashCode() }) { index, library ->
+                libraryLatestItems ?: emptyList(),
+                key = { _, library -> library.id ?: library.hashCode() }
+            ) { _, library ->
                 MediaSection(
                     title = library.name ?: "",
                     items = library.latestItems ?: emptyList(),
+                    serverUrl = serverUrl,
                     onItemSelected = { item ->
                         if (item.isSeries) {
                             val seriesId = item.id
                             if (!seriesId.isNullOrEmpty()) {
-                                appModel.playNextUp(seriesId) { nextItem: BaseItemDto ->
+                                homeViewModel.playNextUp(seriesId) { nextItem: BaseItemDto ->
                                     goPlay(nextItem)
                                 }
                             } else {
@@ -148,15 +158,12 @@ fun HomeScreen(
                         } else {
                             goPlay(item)
                         }
-
                     },
-                    onMenuPressed = { showMenu = true },
-                    appModel = appModel
+                    onMenuPressed = { showMenu = true }
                 )
             }
         }
     }
-
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -167,9 +174,9 @@ private fun MediaSection(
     isMyLibrary: Boolean = false,
     isShowImg17: Boolean = false,
     isContinueWatching: Boolean = false,
+    serverUrl: String,
     onItemSelected: (BaseItemDto) -> Unit,
     onMenuPressed: () -> Unit,
-    appModel: AppModel,
 ) {
     val maxLength = when {
         isMyLibrary -> 194.dp
@@ -181,16 +188,12 @@ private fun MediaSection(
         if (ratio == null || ratio == 1.0f) null else ratio
     }.maxOrNull() ?: 0.666f
 
-    // 1. 根据比例计算动态的宽高
-    var imgWidth = 0.dp
-
-    if (maxAspectRatio >= 1f) {
-        // 横图：宽是长边
-        imgWidth = maxLength
+    val imgWidth = if (maxAspectRatio >= 1f) {
+        maxLength
     } else {
-        // 竖图：高是长边
-        imgWidth = (maxLength.value * maxAspectRatio).dp
+        (maxLength.value * maxAspectRatio).dp
     }
+
     Column {
         Text(
             text = title,
@@ -209,7 +212,8 @@ private fun MediaSection(
             ) {
                 itemsIndexed(
                     items,
-                    key = { _, item -> item.id ?: item.hashCode() }) { index, item ->
+                    key = { _, item -> item.id ?: item.hashCode() }
+                ) { index, item ->
                     val focusRequester = remember { FocusRequester() }
                     val modifier = if (isContinueWatching && index == 0) {
                         Modifier.focusRequester(focusRequester)
@@ -226,20 +230,18 @@ private fun MediaSection(
                     BuildItem(
                         modifier = modifier,
                         item = item,
-                        aspectRatio = maxAspectRatio, // BuildItem expects Int width
-                        imgWidth = imgWidth, // BuildItem expects Int width
+                        aspectRatio = maxAspectRatio,
+                        imgWidth = imgWidth,
                         isShowImg17 = isShowImg17,
                         isMyLibrary = isMyLibrary,
-                        appModel = appModel,
+                        serverUrl = serverUrl,
                         onItemClick = { onItemSelected(item) },
                         onMenuClick = { onMenuPressed() },
                     )
                 }
-
             }
         }
     }
 
     Spacer(modifier = Modifier.height(32.dp))
-
 }

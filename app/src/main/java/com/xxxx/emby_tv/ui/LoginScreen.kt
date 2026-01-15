@@ -14,27 +14,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.tv.material3.*
-import com.xxxx.emby_tv.AppModel
 import com.xxxx.emby_tv.LocalServer
 import com.xxxx.emby_tv.QrCodeUtils
 import com.xxxx.emby_tv.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.withContext
 import com.xxxx.emby_tv.ui.components.TvInputDialog
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -44,93 +38,24 @@ import androidx.navigation.NavController
 import com.xxxx.emby_tv.ui.components.MenuDialog
 import com.xxxx.emby_tv.ui.components.TopStatusBar
 import com.xxxx.emby_tv.ui.theme.ThemeColorManager
+import com.xxxx.emby_tv.ui.viewmodel.LoginViewModel
+import com.xxxx.emby_tv.ui.viewmodel.MainViewModel
 
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-fun ProtocolButton(
-    protocol: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        onClick = onClick,
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
-        border = ClickableSurfaceDefaults.border(
-            border = Border(
-                BorderStroke(
-                    2.dp,
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                )
-            ),
-            focusedBorder = Border(BorderStroke(2.dp, MaterialTheme.colorScheme.primary))
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            focusedContainerColor = MaterialTheme.colorScheme.onSurface,
-            focusedContentColor = MaterialTheme.colorScheme.surface,
-        ),
-        modifier = modifier.height(64.dp)
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = protocol.uppercase(),
-                style = MaterialTheme.typography.bodyLarge
-            )
-        }
-    }
-}
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun LoginScreen(
-    appModel: AppModel,
+    loginViewModel: LoginViewModel,
+    mainViewModel: MainViewModel,
     navController: NavController
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val themeColor = ThemeColorManager.getThemeColorById(context, appModel.currentThemeId)
+    val themeColor = ThemeColorManager.getThemeColorById(context, mainViewModel.currentThemeId)
 
-    var serverUrl by remember {
-        mutableStateOf(
-            appModel.savedServerUrl ?: ""
-        )
-    }
-    var protocol by remember { mutableStateOf("http") }
-    var host by remember { mutableStateOf("shareven.sbs") }
-    var port by remember { mutableStateOf("8096") }
-    var username by remember { mutableStateOf( "shareven"?:appModel.savedUsername) }
-    var password by remember { mutableStateOf( "xrw920406"?: appModel.savedPassword) }
-
-    // Server & QR Code State
-    var qrCodeBitmap by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
-    var localServerAddress by remember { mutableStateOf("") }
-    var localServer by remember { mutableStateOf<com.xxxx.emby_tv.LocalServer?>(null) }
-
-    // Focus Requesters
-    val hostFocusRequester = remember { FocusRequester() }
-    val loginButtonFocusRequester = remember { FocusRequester() }
-
-    // Initial Focus Logic
-    LaunchedEffect(Unit) {
-        if (host.isNotEmpty() && username.isNotEmpty() && password.isNotEmpty()) {
-            loginButtonFocusRequester.requestFocus()
-        } else {
-            hostFocusRequester.requestFocus()
-        }
-    }
-
-    // Dialog states
-    var showServerDialog by remember { mutableStateOf(false) }
-    var showHostDialog by remember { mutableStateOf(false) }
-    var showPortDialog by remember { mutableStateOf(false) }
-    var showUsernameDialog by remember { mutableStateOf(false) }
-    var showPasswordDialog by remember { mutableStateOf(false) }
-
-    fun parseServerUrl(url: String): Triple<String, String, String> {
+    // 解析 savedServerUrl 的辅助函数
+    fun parseServerUrl(url: String?): Triple<String, String, String> {
+        if (url.isNullOrEmpty()) return Triple("http", "", "8096")
         return try {
             val uri = java.net.URI(url)
             Triple(
@@ -143,13 +68,51 @@ fun LoginScreen(
         }
     }
 
+    // 在初始化时就解析 savedServerUrl
+    val initialParsed = remember { parseServerUrl(loginViewModel.savedServerUrl?:"") }
+    
+    // 从 ViewModel 获取保存的值
+    var serverUrl by remember { mutableStateOf(loginViewModel.savedServerUrl) }
+    var protocol by remember { mutableStateOf(initialParsed.first) }
+    var host by remember { mutableStateOf(initialParsed.second) }
+    var port by remember { mutableStateOf(initialParsed.third) }
+    var username by remember { mutableStateOf(loginViewModel.savedUsername) }
+    var password by remember { mutableStateOf(loginViewModel.savedPassword) }
+
+    // Server & QR Code State
+    var qrCodeBitmap by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var localServerAddress by remember { mutableStateOf("") }
+    var localServer by remember { mutableStateOf<LocalServer?>(null) }
+
+    // Focus Requesters
+    val hostFocusRequester = remember { FocusRequester() }
+    val loginButtonFocusRequester = remember { FocusRequester() }
+
+    // Initial Focus Logic - 在 host 已经被正确初始化后执行
+    LaunchedEffect(Unit) {
+        // 给 UI 一点时间完成组合
+        kotlinx.coroutines.delay(100)
+        if (host.isNotEmpty() && username.isNotEmpty() && password.isNotEmpty()) {
+            loginButtonFocusRequester.requestFocus()
+        } else {
+            hostFocusRequester.requestFocus()
+        }
+    }
+
+    // Dialog states
+    var showHostDialog by remember { mutableStateOf(false) }
+    var showPortDialog by remember { mutableStateOf(false) }
+    var showUsernameDialog by remember { mutableStateOf(false) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
+
     fun buildServerUrl(p: String, h: String, pt: String): String {
         return if (h.isNotEmpty()) "$p://$h:$pt" else ""
     }
 
-    LaunchedEffect(appModel.savedServerUrl) {
-        if (!appModel.savedServerUrl.isNullOrEmpty()) {
-            val (p, h, pt) = parseServerUrl(appModel.savedServerUrl!!)
+    // 监听 savedServerUrl 变化（用于外部改变时更新）
+    LaunchedEffect(loginViewModel.savedServerUrl) {
+        if (!loginViewModel.savedServerUrl.isNullOrEmpty()) {
+            val (p, h, pt) = parseServerUrl(loginViewModel.savedServerUrl)
             protocol = p
             host = h
             port = pt
@@ -159,8 +122,9 @@ fun LoginScreen(
     var showMenu by remember { mutableStateOf(false) }
     val failText = stringResource(id = R.string.login_failed)
 
+    // 检查更新
     LaunchedEffect(Unit) {
-        appModel.checkUpdate()
+        mainViewModel.checkUpdate()
     }
 
     LaunchedEffect(themeColor) {
@@ -196,9 +160,9 @@ fun LoginScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         // 顶部状态栏
         TopStatusBar(
-            currentVersion = appModel.currentVersion,
-            newVersion = appModel.newVersion,
-            needUpdate = appModel.needUpdate
+            currentVersion = mainViewModel.currentVersion,
+            newVersion = mainViewModel.newVersion,
+            needUpdate = mainViewModel.needUpdate
         )
         Row(
             modifier = Modifier.fillMaxSize(),
@@ -218,7 +182,7 @@ fun LoginScreen(
                         bitmap = qrCodeBitmap!!,
                         contentDescription = stringResource(R.string.scan_to_input),
                         modifier = Modifier
-                            .size(200.dp) // Reduced from 250.dp to 200.dp
+                            .size(200.dp)
                             .padding(8.dp)
                             .background(Color.White, RoundedCornerShape(12.dp))
                             .padding(12.dp)
@@ -236,7 +200,6 @@ fun LoginScreen(
                         color = Color.White.copy(alpha = 0.7f)
                     )
                 } else {
-                    // Fallback or Loading
                     CircularProgressIndicator(color = Color.White)
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
@@ -300,7 +263,6 @@ fun LoginScreen(
                     label = stringResource(R.string.username),
                     showMenu = { showMenu = true },
                     onClick = { showUsernameDialog = true }
-
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -319,24 +281,25 @@ fun LoginScreen(
                 Button(
                     onClick = {
                         serverUrl = buildServerUrl(protocol, host, port)
-                        appModel.login(serverUrl, username, password) { success ->
-                            if (success) {
-                                // Stop Web Server
+                        loginViewModel.login(
+                            serverUrl = serverUrl,
+                            username = username,
+                            password = password,
+                            onSuccess = {
                                 localServer?.stop()
-                            } else {
-                                //  使用 rememberCoroutineScope 发动协程
+                            },
+                            onError = { error ->
                                 scope.launch {
                                     android.widget.Toast.makeText(
-                                        context.applicationContext, // 使用 applicationContext 更安全
+                                        context.applicationContext,
                                         failText,
                                         android.widget.Toast.LENGTH_SHORT
                                     ).show()
                                 }
-
                             }
-                        }
+                        )
                     },
-                    enabled = !appModel.isLoading,
+                    enabled = !loginViewModel.isLoading,
                     modifier = Modifier
                         .fillMaxWidth(0.8f)
                         .height(56.dp)
@@ -348,12 +311,10 @@ fun LoginScreen(
                                         showMenu = true
                                         true
                                     }
-
                                     Key.Bookmark -> {
                                         showMenu = true
                                         true
                                     }
-
                                     else -> false
                                 }
                             } else false
@@ -366,7 +327,7 @@ fun LoginScreen(
                     ),
                     shape = ButtonDefaults.shape()
                 ) {
-                    if (appModel.isLoading) {
+                    if (loginViewModel.isLoading) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
@@ -399,12 +360,13 @@ fun LoginScreen(
             }
         }
     }
+
     if (showMenu) {
         MenuDialog(
-            needUpdate = appModel.needUpdate,
+            needUpdate = mainViewModel.needUpdate,
             onDismiss = { showMenu = false },
             onLogout = {
-                appModel.logout()
+                loginViewModel.logout()
                 showMenu = false
             },
             onUpdate = {
@@ -412,7 +374,7 @@ fun LoginScreen(
                 navController.navigate("update")
             },
             onThemeChange = { themeColor ->
-                appModel.saveThemeId(themeColor.id)
+                mainViewModel.saveThemeId(themeColor.id)
             },
             isShowLogout = false
         )
@@ -492,7 +454,7 @@ fun TvInputButton(
             focusedBorder = Border(BorderStroke(2.dp, MaterialTheme.colorScheme.primary))
         ),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f), // Added semi-transparent background for better visibility
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
             contentColor = MaterialTheme.colorScheme.onSurface,
             focusedContainerColor = MaterialTheme.colorScheme.onSurface,
             focusedContentColor = MaterialTheme.colorScheme.surface,
@@ -507,7 +469,6 @@ fun TvInputButton(
                             showMenu()
                             true
                         }
-
                         else -> false
                     }
                 } else false
@@ -522,15 +483,53 @@ fun TvInputButton(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-
             )
             val transformedText = visualTransformation.filter(AnnotatedString(value)).text.text
             Text(
                 text = if (value.isEmpty()) " " else transformedText,
                 style = MaterialTheme.typography.bodyLarge,
-
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun ProtocolButton(
+    protocol: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
+        border = ClickableSurfaceDefaults.border(
+            border = Border(
+                BorderStroke(
+                    2.dp,
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+            ),
+            focusedBorder = Border(BorderStroke(2.dp, MaterialTheme.colorScheme.primary))
+        ),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            focusedContainerColor = MaterialTheme.colorScheme.onSurface,
+            focusedContentColor = MaterialTheme.colorScheme.surface,
+        ),
+        modifier = modifier.height(64.dp)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = protocol.uppercase(),
+                style = MaterialTheme.typography.bodyLarge
             )
         }
     }

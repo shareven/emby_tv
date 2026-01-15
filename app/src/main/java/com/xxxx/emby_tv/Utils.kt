@@ -5,8 +5,8 @@ import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
-import com.xxxx.emby_tv.model.BaseItemDto
-import com.xxxx.emby_tv.model.MediaDto
+import com.xxxx.emby_tv.data.model.BaseItemDto
+import com.xxxx.emby_tv.data.model.MediaDto
 
 object Utils {
     val gson = Gson()

@@ -5,7 +5,6 @@ import com.xxxx.emby_tv.ui.LibraryScreen
 import com.xxxx.emby_tv.ui.LoginScreen
 import com.xxxx.emby_tv.ui.PlayerScreen
 
-
 import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -24,13 +23,19 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.google.gson.Gson
 import com.xxxx.emby_tv.ui.MediaDetailScreen
 import com.xxxx.emby_tv.ui.HomeScreen
 import com.xxxx.emby_tv.ui.UpdateScreen
 import com.xxxx.emby_tv.ui.components.BuildGradientBackground
 import com.xxxx.emby_tv.ui.components.Loading
 import com.xxxx.emby_tv.ui.theme.ThemeColorManager
+import com.xxxx.emby_tv.ui.viewmodel.MainViewModel
+import com.xxxx.emby_tv.ui.viewmodel.HomeViewModel
+import com.xxxx.emby_tv.ui.viewmodel.LoginViewModel
+import com.xxxx.emby_tv.ui.viewmodel.LibraryViewModel
+import com.xxxx.emby_tv.ui.viewmodel.DetailViewModel
+import com.xxxx.emby_tv.ui.viewmodel.PlayerViewModel
+import com.xxxx.emby_tv.ui.viewmodel.UpdateViewModel
 
 
 class MainActivity : ComponentActivity() {
@@ -42,11 +47,7 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-
-
-                    EmbyTvApp()
-
-
+            EmbyTvApp()
         }
     }
 }
@@ -54,20 +55,23 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun EmbyTvApp() {
     val navController = rememberNavController()
-    val appModel: AppModel = viewModel()
-    val gson = Gson()
+    
+    // 使用新的 MainViewModel
+    val mainViewModel: MainViewModel = viewModel()
+    
+    // 响应式监听状态变化
+    val isLoaded = mainViewModel.isLoaded
+    val isLoggedIn = mainViewModel.isLoggedIn
 
-    // 响应式监听AppModel的状态变化
-    val isLoaded = appModel.isLoaded
-    val isLoggedIn = appModel.isLoggedIn
-
-   
+    // 初始化加载
+    LaunchedEffect(Unit) {
+        mainViewModel.initialize()
+    }
 
     // 监听状态变化并自动导航
     LaunchedEffect(isLoaded, isLoggedIn) {
         when {
             !isLoaded -> {
-                // 如果当前不在加载页面，导航到加载页面
                 if (navController.currentDestination?.route != "loading") {
                     navController.navigate("loading") {
                         popUpTo(0) { inclusive = true }
@@ -76,7 +80,6 @@ fun EmbyTvApp() {
             }
 
             isLoggedIn -> {
-                // 如果已登录且不在主页，导航到主页
                 if (navController.currentDestination?.route != "home") {
                     navController.navigate("home") {
                         popUpTo(0) { inclusive = true }
@@ -85,7 +88,6 @@ fun EmbyTvApp() {
             }
 
             else -> {
-                // 如果未登录且不在登录页，导航到登录页
                 if (navController.currentDestination?.route != "login") {
                     navController.navigate("login") {
                         popUpTo(0) { inclusive = true }
@@ -97,7 +99,7 @@ fun EmbyTvApp() {
 
     // 获取当前主题色
     val context = LocalContext.current
-    val currentThemeColor = ThemeColorManager.getThemeColorById(context, appModel.currentThemeId)
+    val currentThemeColor = ThemeColorManager.getThemeColorById(context, mainViewModel.currentThemeId)
 
     Emby_tvTheme(themeColor = currentThemeColor) {
         Surface(
@@ -107,32 +109,38 @@ fun EmbyTvApp() {
             BuildGradientBackground(context = context, themeColor = currentThemeColor) {
                 NavHost(
                     navController = navController,
-                    startDestination = "loading" // 总是从加载页面开始
+                    startDestination = "loading"
                 ) {
                     // 加载页面
                     composable("loading") {
                         Loading()
                     }
+                    
                     // 登录页面
                     composable("login") {
+                        val loginViewModel: LoginViewModel = viewModel()
                         LoginScreen(
-                            appModel = appModel,
+                            loginViewModel = loginViewModel,
+                            mainViewModel = mainViewModel,
                             navController = navController
                         )
                     }
 
                     // 主页面
                     composable("home") {
+                        val homeViewModel: HomeViewModel = viewModel()
                         HomeScreen(
-                            appModel = appModel,
+                            homeViewModel = homeViewModel,
+                            mainViewModel = mainViewModel,
                             navController = navController
                         )
                     }
 
                     // 更新页面
                     composable("update") {
+                        val updateViewModel: UpdateViewModel = viewModel()
                         UpdateScreen(
-                            appModel = appModel,
+                            updateViewModel = updateViewModel,
                             onNavigateBack = {
                                 navController.popBackStack()
                             }
@@ -157,11 +165,13 @@ fun EmbyTvApp() {
                         val libraryId = backStackEntry.arguments?.getString("libraryId") ?: ""
                         val libraryName = backStackEntry.arguments?.getString("libraryName") ?: ""
                         val type = backStackEntry.arguments?.getString("type") ?: ""
+                        val libraryViewModel: LibraryViewModel = viewModel()
+                        
                         LibraryScreen(
                             parentId = libraryId,
                             title = libraryName,
                             type = type,
-                            appModel = appModel,
+                            libraryViewModel = libraryViewModel,
                             onNavigateBack = {
                                 navController.popBackStack()
                             },
@@ -177,43 +187,45 @@ fun EmbyTvApp() {
                         arguments = listOf(navArgument("seriesId") { type = NavType.StringType })
                     ) { backStackEntry ->
                         val seriesId = backStackEntry.arguments?.getString("seriesId") ?: ""
+                        val detailViewModel: DetailViewModel = viewModel()
+                        
                         MediaDetailScreen(
                             seriesId = seriesId,
+                            detailViewModel = detailViewModel,
                             onNavigateToSeries = { nestedSeriesId ->
                                 navController.navigate("series/$nestedSeriesId")
                             },
                             onNavigateToPlayer = { mediaItem ->
                                 val id = mediaItem.id ?: ""
                                 val position = mediaItem.userData?.playbackPositionTicks ?: 0L
-                               
                                 navController.navigate("player/$id?position=$position")
-                            },
-                            appModel = appModel
+                            }
                         )
                     }
 
-                    // 通用媒体详情页面 (修复 media/xxx 路由崩溃问题)
+                    // 通用媒体详情页面
                     composable(
                         "media/{mediaId}",
                         arguments = listOf(navArgument("mediaId") { type = NavType.StringType })
                     ) { backStackEntry ->
                         val mediaId = backStackEntry.arguments?.getString("mediaId") ?: ""
+                        val detailViewModel: DetailViewModel = viewModel()
+                        
                         MediaDetailScreen(
-                            seriesId = mediaId, // 复用 MediaDetailScreen，seriesId 参数实际就是 generic mediaId
+                            seriesId = mediaId,
+                            detailViewModel = detailViewModel,
                             onNavigateToSeries = { nestedSeriesId ->
                                 navController.navigate("series/$nestedSeriesId")
                             },
                             onNavigateToPlayer = { mediaItem ->
                                 val id = mediaItem.id ?: ""
                                 val position = mediaItem.userData?.playbackPositionTicks ?: 0L
-
                                 navController.navigate("player/$id?position=$position")
-                            },
-                            appModel = appModel
+                            }
                         )
                     }
 
-                    // 播放器页面 - 使用参数传递避免由巨大JSON导致的崩溃
+                    // 播放器页面
                     composable(
                         "player/{mediaId}?position={position}",
                         arguments = listOf(
@@ -225,16 +237,16 @@ fun EmbyTvApp() {
                         )
                     ) { backStackEntry ->
                         val mediaId = backStackEntry.arguments?.getString("mediaId") ?: ""
-                        val playbackPositionTicks =
-                            backStackEntry.arguments?.getLong("position") ?: 0L
-
+                        val playbackPositionTicks = backStackEntry.arguments?.getLong("position") ?: 0L
+                        val playerViewModel: PlayerViewModel = viewModel()
+                        val homeViewModel: HomeViewModel = viewModel()
+                        
                         PlayerScreen(
                             mediaId = mediaId,
                             playbackPositionTicks = playbackPositionTicks,
-                            appModel = appModel,
+                            playerViewModel = playerViewModel,
                             onBack = {
-
-                                appModel.loadData()
+                                homeViewModel.refresh()
                                 navController.popBackStack()
                             },
                             onNavigateToPlayer = { nextItem ->

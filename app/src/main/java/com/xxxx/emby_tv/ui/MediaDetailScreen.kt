@@ -9,9 +9,8 @@ import androidx.tv.material3.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import com.xxxx.emby_tv.AppModel
-import com.xxxx.emby_tv.model.BaseItemDto
-import com.xxxx.emby_tv.model.PersonInfo
+import com.xxxx.emby_tv.data.model.BaseItemDto
+import com.xxxx.emby_tv.data.model.PersonInfo
 import androidx.compose.ui.res.stringResource
 import com.xxxx.emby_tv.R
 import androidx.compose.ui.layout.ContentScale
@@ -35,20 +34,27 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
 import coil3.compose.SubcomposeAsyncImage
+import com.xxxx.emby_tv.data.repository.EmbyRepository
+import com.xxxx.emby_tv.ui.viewmodel.DetailViewModel
 import kotlinx.coroutines.delay
 
 @Composable
 fun MediaDetailScreen(
     seriesId: String,
+    detailViewModel: DetailViewModel,
     onNavigateToSeries: (String) -> Unit,
     onNavigateToPlayer: (BaseItemDto) -> Unit,
-    appModel: AppModel,
 ) {
-    val mediaInfo = appModel.currentMediaInfo
+    val context = LocalContext.current
+    val repository = remember { EmbyRepository.getInstance(context) }
+    val serverUrl = repository.serverUrl ?: ""
+    
+    val mediaInfo = detailViewModel.mediaInfo
     val playButtonFocusRequester = remember { FocusRequester() }
 
     // Series Data State
@@ -59,7 +65,7 @@ fun MediaDetailScreen(
     var isLoadingSeriesData by remember { mutableStateOf(false) }
 
     LaunchedEffect(seriesId) {
-        appModel.loadMediaInfo(seriesId)
+        detailViewModel.loadMediaInfo(seriesId)
     }
 
     // Auto scroll to current item
@@ -82,9 +88,9 @@ fun MediaDetailScreen(
         if (mediaInfo != null && mediaInfo.isSeries) {
             isLoadingSeriesData = true
             try {
-                val seasonsList = appModel.getSeasonList(seriesId)
-                val episodesList = appModel.getSeriesList(seriesId)
-                val x = appModel.getResumeItem(seriesId)
+                val seasonsList = detailViewModel.getSeasonList(seriesId)
+                val episodesList = detailViewModel.getSeriesList(seriesId)
+                val x = detailViewModel.getResumeItem(seriesId)
 
                 seasons = seasonsList
                 episodes = episodesList
@@ -101,7 +107,6 @@ fun MediaDetailScreen(
     // Default focus logic
     LaunchedEffect(mediaInfo, isLoadingSeriesData) {
         if (mediaInfo != null && !isLoadingSeriesData) {
-            // Delay slightly to ensure UI is built and composed
             delay(200)
             try {
                 playButtonFocusRequester.requestFocus()
@@ -120,8 +125,6 @@ fun MediaDetailScreen(
             CircularProgressIndicator(color = Color.White)
         }
     } else {
-        val serverUrl = appModel.serverUrl ?: ""
-
         // Construct Backdrop URL
         val backdropTags = mediaInfo.backdropImageTags
         val parentBackdropTags = mediaInfo.parentBackdropImageTags
@@ -266,7 +269,6 @@ fun MediaDetailScreen(
                                 focusedContentColor = MaterialTheme.colorScheme.onPrimary
                             )
                         ) {
-
                             val isResume =
                                 resume != null || ((mediaInfo.userData?.playbackPositionTicks
                                     ?: 0L) > 0)
@@ -406,7 +408,7 @@ fun MediaDetailScreen(
                                     modifier = Modifier,
                                     isMyLibrary = false,
                                     isShowOverview = true,
-                                    appModel = appModel,
+                                    serverUrl = serverUrl,
                                     onItemClick = { onNavigateToPlayer(episode) }
                                 )
                             }
@@ -447,7 +449,7 @@ fun MediaDetailScreen(
                                     person = person,
                                     imgWidth = castImgWidth,
                                     aspectRatio = maxAspectRatio,
-                                    appModel = appModel
+                                    serverUrl = serverUrl
                                 )
                             }
                         }
@@ -586,11 +588,11 @@ fun PersonCard(
     person: PersonInfo,
     imgWidth: Dp,
     aspectRatio: Float,
-    appModel: AppModel,
+    serverUrl: String,
 ) {
 
     Surface(
-        onClick = {}, // 空点击处理，但启用聚焦效果
+        onClick = {},
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
         border = ClickableSurfaceDefaults.border(
             focusedBorder = Border(
@@ -625,7 +627,7 @@ fun PersonCard(
                 contentAlignment = Alignment.Center
             ) {
                 val imageUrl = if (person.primaryImageTag != null) {
-                    "${appModel.serverUrl}/emby/Items/${person.id}/Images/Primary?maxWidth=300&tag=${person.primaryImageTag}&quality=80"
+                    "$serverUrl/emby/Items/${person.id}/Images/Primary?maxWidth=300&tag=${person.primaryImageTag}&quality=80"
                 } else null
 
                 if (imageUrl != null) {

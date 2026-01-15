@@ -31,12 +31,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
-import com.xxxx.emby_tv.AppModel
 import com.xxxx.emby_tv.R
 import com.xxxx.emby_tv.Utils.formatFileSize
-import com.xxxx.emby_tv.model.BaseItemDto
-import com.xxxx.emby_tv.model.MediaDto
-import com.xxxx.emby_tv.model.MediaStreamDto
+import com.xxxx.emby_tv.data.repository.EmbyRepository
+import com.xxxx.emby_tv.data.model.BaseItemDto
+import com.xxxx.emby_tv.data.model.MediaDto
+import com.xxxx.emby_tv.data.model.MediaStreamDto
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @Composable
 fun PlayerMenu(
@@ -55,7 +57,8 @@ fun PlayerMenu(
     onPlayModeChange: (Int) -> Unit,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
-    appModel: AppModel,
+    serverUrl: String,
+    repository: EmbyRepository,
     onNavigateToPlayer: (BaseItemDto) -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -83,7 +86,7 @@ fun PlayerMenu(
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
-            usePlatformDefaultWidth = false // 必须设置，否则无法撑满左右边缘
+            usePlatformDefaultWidth = false
         )
     ) {
         Box(
@@ -96,7 +99,6 @@ fun PlayerMenu(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight(0.65f),
-//                    .background(Color.Black.copy(alpha = 0.7f)), // 背景遮罩
                 shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
                 border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))),
                 colors = SurfaceDefaults.colors(
@@ -164,7 +166,8 @@ fun PlayerMenu(
                             "Info" -> InfoTab(mediaInfo, media, isFavorite, onToggleFavorite)
                             "Episodes" -> EpisodesTab(
                                 mediaInfo,
-                                appModel,
+                                serverUrl,
+                                repository,
                                 onDismiss,
                                 onNavigateToPlayer
                             )
@@ -209,7 +212,7 @@ fun InfoTab(
         // 1. 标题栏
         Text(
             text = mediaInfo.seriesName ?: mediaInfo.name ?: "",
-            style = TvMaterialTheme.typography.headlineMedium, // 加大标题
+            style = TvMaterialTheme.typography.headlineMedium,
             color = Color.White,
             fontWeight = FontWeight.Bold
         )
@@ -228,48 +231,41 @@ fun InfoTab(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 3. 媒体元数据标签组 (年份、分辨率、视频编码、大小)
+        // 3. 媒体元数据标签组
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 年份标签
             val year = mediaInfo.productionYear?.toString() ?: mediaInfo.premiereDate?.take(4) ?: ""
             if (year.isNotEmpty()) MetaBadge(text = year)
 
-            // 视频信息解析
             val source = media.mediaSources?.firstOrNull()
             val videoStream = source?.mediaStreams?.find { it.type == "Video" }
 
-            // 分辨率 (如 4K, 1080P)
             val resolution = when {
                 (videoStream?.width ?: 0) >= 3840 -> "4K"
                 (videoStream?.width ?: 0) >= 1920 -> "1080P"
                 (videoStream?.width ?: 0) >= 1280 -> "720P"
                 else -> videoStream?.displayTitle?.split(" ")?.firstOrNull() ?: ""
             }
-            if (resolution.isNotEmpty()) MetaBadge(text = resolution, containerColor = Color(0xFFE50914)) // 红色醒目
+            if (resolution.isNotEmpty()) MetaBadge(text = resolution, containerColor = Color(0xFFE50914))
 
-            // HDR
-            val videoRange = videoStream?.videoRange?:""
-            if(videoRange.isNotEmpty())MetaBadge(text = videoRange)
-            // 视频编码 (如 HEVC, H264)
+            val videoRange = videoStream?.videoRange ?: ""
+            if (videoRange.isNotEmpty()) MetaBadge(text = videoRange)
             val codec = videoStream?.codec?.uppercase() ?: ""
             if (codec.isNotEmpty()) MetaBadge(text = codec)
 
-            // 文件大小
             val fileSize = formatFileSize(mediaInfo.size)
             MetaBadge(text = fileSize)
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // 4. 操作按钮与转码信息区
+        // 4. 操作按钮
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
-            // 收藏按钮
             Button(
                 onClick = onToggleFavorite,
                 contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
@@ -297,7 +293,7 @@ fun InfoTab(
         Spacer(modifier = Modifier.height(16.dp))
 
         Surface(
-            onClick = { /* 可以在这里实现展开全屏简介的逻辑 */ },
+            onClick = { },
             colors = ClickableSurfaceDefaults.colors(
                 containerColor = Color.Transparent,
                 focusedContainerColor = Color.Gray.copy(alpha = 0.4f),
@@ -316,7 +312,7 @@ fun InfoTab(
             )
         }
 
-        Spacer(modifier = Modifier.height(50.dp)) // 底部留白
+        Spacer(modifier = Modifier.height(50.dp))
     }
 }
 
@@ -346,10 +342,12 @@ fun MetaBadge(
 @Composable
 fun EpisodesTab(
     mediaInfo: BaseItemDto,
-    appModel: AppModel,
+    serverUrl: String,
+    repository: EmbyRepository,
     onDismiss: () -> Unit,
     onNavigateToPlayer: (BaseItemDto) -> Unit
 ) {
+    val scope = rememberCoroutineScope()
     val seriesId = mediaInfo.seriesId
     if (seriesId == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -362,14 +360,15 @@ fun EpisodesTab(
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(seriesId) {
-        try {
-            val list = appModel.getSeriesList(seriesId)
-            @Suppress("UNCHECKED_CAST")
-            episodes = list
-        } catch (e: Exception) {
-            e.printStackTrace()
-        } finally {
-            isLoading = false
+        scope.launch(Dispatchers.IO) {
+            try {
+                val list = repository.getSeriesList(seriesId)
+                episodes = list
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                isLoading = false
+            }
         }
     }
 
@@ -384,14 +383,11 @@ fun EpisodesTab(
     val maxLength = 220.dp
     val maxAspectRatio = episodes.mapNotNull {
         val ratio = it.primaryImageAspectRatio?.toFloat()
-        // 排除掉 null、1.0 以及明显不是正常比例的数值
         if (ratio == null || ratio == 1f) null else ratio
     }.maxOrNull() ?: 0.666f
     val imgWidth = if (maxAspectRatio >= 1) {
-        // 横图：宽是长边
         maxLength
     } else {
-        // 竖图：高是长边
         (maxLength.value * maxAspectRatio).dp
     }
 
@@ -421,8 +417,8 @@ fun EpisodesTab(
                 aspectRatio = maxAspectRatio,
                 modifier = Modifier,
                 isMyLibrary = false,
-                isShowOverview = false, // Less space in Player Menu
-                appModel = appModel,
+                isShowOverview = false,
+                serverUrl = serverUrl,
                 onItemClick = {
                     if (!isCurrent) {
                         onDismiss()
@@ -521,8 +517,6 @@ fun SubtitlesTab(tracks: List<MediaStreamDto>, selectedIndex: Int, onSelect: (In
 fun AudioTab(tracks: List<MediaStreamDto>, selectedIndex: Int, onSelect: (Int) -> Unit) {
     LazyColumn(contentPadding = PaddingValues(horizontal = 150.dp)) {
         item {
-            // Optional: Header or "Audio" title using audio_label if needed, but tabs already have title.
-            // Just listing tracks here.
         }
         items(tracks) { track ->
             val index = (track.index) ?: -1

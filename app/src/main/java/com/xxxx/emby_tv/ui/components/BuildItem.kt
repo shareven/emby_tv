@@ -41,26 +41,21 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.Dp
-import com.xxxx.emby_tv.AppModel
-
-// ...
 
 import com.xxxx.emby_tv.Utils
-import com.xxxx.emby_tv.model.BaseItemDto
-
-// ...
+import com.xxxx.emby_tv.data.model.BaseItemDto
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun BuildItem(
-    item: BaseItemDto, // 建议后续定义为 Data Class
+    item: BaseItemDto,
     imgWidth: Dp,
     aspectRatio: Float,
     modifier: Modifier,
     isMyLibrary: Boolean,
-    isShowImg17: Boolean = false, // 1.7比例
+    isShowImg17: Boolean = false,
     isShowOverview: Boolean = false,
-    appModel: AppModel, // Need AppModel to construct image URL
+    serverUrl: String, // 直接接受 serverUrl 而不是 AppModel
     onItemClick: () -> Unit,
     onMenuClick: (() -> Unit)? = null,
 ) {
@@ -73,8 +68,8 @@ fun BuildItem(
     val primaryTag = imageTags?.get("Primary")
 
     // Construct Image URL using Utils.getImageUrl
-    val imageUrl = Utils.getImageUrl(appModel.serverUrl ?: "", item, isShowImg17)
-//    Log.e(aspectRatio.toString(),imgWidth.toString())
+    val imageUrl = Utils.getImageUrl(serverUrl, item, isShowImg17)
+
     // TV 端核心组件：Surface 自动处理焦点缩放、边框和点击
     Surface(
         onClick = onItemClick,
@@ -91,7 +86,7 @@ fun BuildItem(
             .scale(focusedScale = 1.1f),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Black.copy(alpha = 0.2f),
-            focusedContainerColor =  MaterialTheme.colorScheme.onSurface,
+            focusedContainerColor = MaterialTheme.colorScheme.onSurface,
             contentColor = MaterialTheme.colorScheme.onSurface,
             pressedContentColor = MaterialTheme.colorScheme.primary,
             focusedContentColor = MaterialTheme.colorScheme.primary
@@ -118,16 +113,16 @@ fun BuildItem(
             }
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // 1. 顶部图片区域 (Stack -> Box)
+            // 1. 顶部图片区域
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(aspectRatio)
-                    .background(Color(0xFF2D2D2D), RoundedCornerShape(8.dp)), // 默认底层背景色
+                    .background(Color(0xFF2D2D2D), RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
 
-                // 使用 Coil 加载图片 (相当于 CachedNetworkImage)
+                // 使用 Coil 加载图片
                 SubcomposeAsyncImage(
                     model = imageUrl,
                     contentDescription = null,
@@ -150,7 +145,7 @@ fun BuildItem(
                     }
                 )
 
-                // 播放标记 (Badge/CircleAvatar)
+                // 播放标记
                 if (isSeries || isPlayed) {
                     Box(
                         modifier = Modifier
@@ -181,10 +176,8 @@ fun BuildItem(
                     }
                 }
 
-                // 2. 播放进度条 (LinearProgressIndicator) - Replaced with Box for TV compatibility or import mobile version if needed.
-                // Using Box for simple progress bar to avoid import conflict if possible, or use mobile LinearProgressIndicator explicitly.
+                // 2. 播放进度条
                 if (!isSeries && !isMyLibrary) {
-
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()

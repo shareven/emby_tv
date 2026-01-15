@@ -1,4 +1,4 @@
-package com.xxxx.emby_tv.model
+package com.xxxx.emby_tv.data.model
 
 import com.google.gson.annotations.SerializedName
 
