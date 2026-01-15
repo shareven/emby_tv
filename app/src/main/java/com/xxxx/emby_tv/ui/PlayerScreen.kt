@@ -4,9 +4,11 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import android.view.ViewGroup
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ArrowForward
@@ -122,6 +124,10 @@ fun PlayerScreen(
     var endedHandled by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var showStats by remember { mutableStateOf(false) }
+    
+    // 继续播放/从头开始 按钮状态
+    var showResumeButtons by remember { mutableStateOf(playbackPositionTicks > 0) }
+    var resumeButtonsShownOnce by remember { mutableStateOf(false) }
 
     // 用于跟踪是否已经尝试过转码回退
     var hasTriedTranscodeFallback by remember { mutableStateOf(false) }
@@ -960,6 +966,15 @@ fun PlayerScreen(
         }
     }
 
+    // 自动隐藏继续播放按钮（3秒后）
+    LaunchedEffect(showResumeButtons) {
+        if (showResumeButtons && !resumeButtonsShownOnce) {
+            resumeButtonsShownOnce = true
+            delay(3000)
+            showResumeButtons = false
+        }
+    }
+
     // Load session once after reporting playing
     // Load session once after reporting playing (with retry)
     LaunchedEffect(hasReportedPlaying, media.playSessionId) {
@@ -1144,12 +1159,22 @@ fun PlayerScreen(
     // 监听按键显示菜单
     val focusRequester = remember { FocusRequester() }
 
-    // UI 结构
+    // UI 结构 - 最外层纯黑背景
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
             .onKeyEvent { event ->
+                // 如果 Resume 按钮正在显示，让按钮处理焦点，不拦截按键
+                if (showResumeButtons && playbackPositionTicks > 0) {
+                    return@onKeyEvent false
+                }
+                
                 if (event.key == Key.DirectionLeft) {
                     if (event.type == KeyEventType.KeyDown) {
                         if (leftKeyDownTime == 0L) {
@@ -1319,7 +1344,104 @@ fun PlayerScreen(
             }
         }
 
-        // 4. Menu Dialog
+        // 4. Resume Buttons (从头开始 / 继续播放)
+        if (showResumeButtons && playbackPositionTicks > 0) {
+            val continueButtonFocusRequester = remember { FocusRequester() }
+            
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(bottom = 80.dp, end = 48.dp)
+                        .background(
+                            Color.Black.copy(alpha = 0.7f),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // 从头开始按钮
+                    Surface(
+                        onClick = {
+                            showResumeButtons = false
+                            player.seekTo(0)
+                            player.play()
+                        },
+                        modifier = Modifier.height(48.dp),
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+                        border = ClickableSurfaceDefaults.border(
+                            border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))),
+                            focusedBorder = Border(BorderStroke(2.dp, Color.White))
+                        ),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color.White.copy(alpha = 0.1f),
+                            focusedContainerColor = Color.White.copy(alpha = 0.7f),
+                            contentColor = Color.White,
+                            focusedContentColor = Color.Black
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 14.dp)
+                                .fillMaxHeight(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = stringResource(R.string.play_from_start),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    // 继续播放按钮
+                    Surface(
+                        onClick = {
+                            showResumeButtons = false
+                        },
+                        modifier = Modifier
+                            .height(48.dp)
+                            .focusRequester(continueButtonFocusRequester),
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+                        border = ClickableSurfaceDefaults.border(
+                            border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))),
+                            focusedBorder = Border(BorderStroke(2.dp, Color.White))
+                        ),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color.White.copy(alpha = 0.1f),
+                            focusedContainerColor = Color.White.copy(alpha = 0.9f),
+                            contentColor = Color.White,
+                            focusedContentColor = Color.Black
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 24.dp)
+                                .fillMaxHeight(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = stringResource(R.string.continue_playback),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // 自动聚焦到继续播放按钮
+            LaunchedEffect(Unit) {
+                delay(100)
+                continueButtonFocusRequester.requestFocus()
+            }
+        }
+
+        // 5. Menu Dialog
         if (showMenu) {
             PlayerMenu(
                 onDismiss = { showMenu = false },
@@ -1372,7 +1494,6 @@ fun PlayerScreen(
             focusRequester.requestFocus()
         }
     }
-
-
+    } // 最外层纯黑背景 Box 闭合
 }
 

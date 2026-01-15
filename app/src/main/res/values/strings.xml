@@ -138,4 +138,8 @@
     <string name="added_to_favorite">Added to favorite</string>
     <string name="removed_from_favorite">Removed from favorite</string>
     <string name="no_favorite_items">No favorite items</string>
+
+    <!-- Player Resume Dialog -->
+    <string name="play_from_start">Play from Start</string>
+    <string name="continue_playback">Continue</string>
 </resources>

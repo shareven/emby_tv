@@ -138,4 +138,8 @@
     <string name="added_to_favorite">已添加到收藏</string>
     <string name="removed_from_favorite">已取消收藏</string>
     <string name="no_favorite_items">暂无收藏内容</string>
+
+    <!-- Player Resume Dialog -->
+    <string name="play_from_start">从头开始</string>
+    <string name="continue_playback">继续播放</string>
 </resources>
