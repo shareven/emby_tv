@@ -32,6 +32,7 @@ fun HomeScreen(
     homeViewModel: HomeViewModel,
     mainViewModel: MainViewModel,
     navController: NavController,
+    onSwitchAccount: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
@@ -66,6 +67,10 @@ fun HomeScreen(
             },
             onThemeChange = { themeColor ->
                 mainViewModel.saveThemeId(themeColor.id)
+            },
+            onSwitchAccount = {
+                showMenu = false
+                onSwitchAccount()
             }
         )
     }
@@ -110,10 +115,10 @@ fun HomeScreen(
             }
 
             // 继续观看
-            item {
+           if(resumeItems != null && resumeItems.isNotEmpty()) item {
                 MediaSection(
                     title = stringResource(R.string.continue_watching),
-                    items = resumeItems ?: emptyList(),
+                    items = resumeItems ,
                     isShowImg17 = true,
                     isContinueWatching = true,
                     serverUrl = serverUrl,

@@ -280,9 +280,10 @@ fun LoginScreen(
 
                 Button(
                     onClick = {
-                        serverUrl = buildServerUrl(protocol, host, port)
+                        val builtServerUrl = buildServerUrl(protocol, host, port)
+                        serverUrl = builtServerUrl
                         loginViewModel.login(
-                            serverUrl = serverUrl,
+                            serverUrl = builtServerUrl,
                             username = username,
                             password = password,
                             onSuccess = {

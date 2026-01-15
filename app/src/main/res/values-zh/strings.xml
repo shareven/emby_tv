@@ -119,6 +119,18 @@
     <string name="theme_color_green">翠绿</string>
     <string name="theme_color_amber">琥珀</string>
 
+    <!-- Account Management -->
+    <string name="switch_account">切换账号</string>
+    <string name="account_management">账号管理</string>
+    <string name="current_account">当前账号</string>
+    <string name="saved_accounts">已保存账号</string>
+    <string name="add_account">添加账号</string>
+    <string name="delete_account">删除账号</string>
+    <string name="confirm_delete_account">确定要删除此账号吗？</string>
+    <string name="no_saved_accounts">暂无已保存账号</string>
+    <string name="account_switched">账号切换成功</string>
+    <string name="account_deleted">账号已删除</string>
+
     <!-- Favorite -->
     <string name="favorite">收藏</string>
     <string name="add_to_favorite">添加收藏</string>

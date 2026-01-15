@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.SwitchAccount
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,6 +44,7 @@ fun MenuDialog(
     onLogout: () -> Unit,
     onUpdate: () -> Unit,
     onThemeChange: (ThemeColor) -> Unit,
+    onSwitchAccount: (() -> Unit)? = null,
     isShowLogout: Boolean = true
 ) {
     val showThemeSelection = remember { mutableStateOf(false) }
@@ -101,6 +103,18 @@ fun MenuDialog(
                                 modifier = Modifier.focusRequester(firstItemFocusRequester),
                                 primaryColor = currentPrimaryColor
                             )
+                        }
+
+                        // 切换账号项
+                        if (onSwitchAccount != null) {
+                            menuItems.add {
+                                MenuListItem(
+                                    text = stringResource(R.string.switch_account),
+                                    icon = Icons.Filled.SwitchAccount,
+                                    onClick = { onSwitchAccount(); onDismiss() },
+                                    primaryColor = currentPrimaryColor
+                                )
+                            }
                         }
 
                         // 登出项
@@ -220,30 +234,6 @@ fun ThemeSelectionDialog(
                     .padding(horizontal = 80.dp, vertical = 20.dp) // TV 端需要极大的页边距
             ) {
 
-                Surface(
-                    onClick = onDismiss,
-                    shape = ClickableSurfaceDefaults.shape(CircleShape),
-                    colors = ClickableSurfaceDefaults.colors(
-                    ),
-                    modifier = Modifier.align(Alignment.Start)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null,
-                            tint = LocalContentColor.current
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = stringResource(R.string.back),
-                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(20.dp))
 
                 //  颜色网格：使用更大的间距和更精致的卡片
                 LazyVerticalGrid(

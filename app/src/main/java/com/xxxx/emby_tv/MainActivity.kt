@@ -23,6 +23,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.xxxx.emby_tv.ui.AccountScreen
 import com.xxxx.emby_tv.ui.MediaDetailScreen
 import com.xxxx.emby_tv.ui.HomeScreen
 import com.xxxx.emby_tv.ui.UpdateScreen
@@ -132,7 +133,42 @@ fun EmbyTvApp() {
                         HomeScreen(
                             homeViewModel = homeViewModel,
                             mainViewModel = mainViewModel,
-                            navController = navController
+                            navController = navController,
+                            onSwitchAccount = {
+                                navController.navigate("account")
+                            }
+                        )
+                    }
+
+                    // 账号管理页面
+                    composable("account") {
+                        val loginViewModel: LoginViewModel = viewModel()
+                        AccountScreen(
+                            mainViewModel = mainViewModel,
+                            savedAccounts = loginViewModel.savedAccounts,
+                            currentAccountId = loginViewModel.currentAccountId,
+                            onBack = {
+                                navController.popBackStack()
+                            },
+                            onSwitchAccount = { accountId ->
+                                loginViewModel.switchAccount(
+                                    accountId = accountId,
+                                    onSuccess = {
+                                        // 切换成功后回到首页并刷新
+                                        navController.navigate("home") {
+                                            popUpTo(0) { inclusive = true }
+                                        }
+                                    },
+                                    onError = { /* 可选：显示错误提示 */ }
+                                )
+                            },
+                            onDeleteAccount = { accountId ->
+                                loginViewModel.removeAccount(accountId)
+                            },
+                            onAddAccount = {
+                                // 退出当前账号，进入登录页面添加新账号
+                                mainViewModel.logout()
+                            }
                         )
                     }
 
