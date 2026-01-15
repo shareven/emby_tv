@@ -11,13 +11,14 @@
 
 This is an open-source Emby client aimed at learning and exchanging technical knowledge. The project demonstrates Android usage for TV/remote UI, focus handling, streaming integration with Emby API, and localization.
 
-## 下载 / Download
+ ## 下载 / Download
 
- 最新版本 / Newest release: v2.0.1
+ 最新版本 / Newest release: v2.0.2
 
 
+ [Android apk release](https://github.com/shareven/emby_tv/releases/)
 
-[Android apk release](https://github.com/shareven/emby_tv/releases/)
+ ![Minimum Android](https://img.shields.io/badge/Minimum-Android%206.0-3DDC84?logo=android&style=flat)
 
 
 ![GitHub All Releases](https://img.shields.io/github/downloads/shareven/emby_tv/total)

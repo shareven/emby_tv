@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.grid.items
 import com.xxxx.emby_tv.AppModel
 import com.xxxx.emby_tv.model.BaseItemDto
 import androidx.compose.ui.res.stringResource
-import com.xxxx.emby_tv.ui.theme.GradientBackground
 import com.xxxx.emby_tv.R
 import com.xxxx.emby_tv.ui.components.Loading
 
@@ -46,12 +45,11 @@ fun LibraryScreen(
         appModel.loadLibraryItems(parentId, type)
     }
 
-    GradientBackground(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
             Text(
                 text = if (title.isNotEmpty()) title else stringResource(R.string.my_libraries),
                 style = androidx.tv.material3.MaterialTheme.typography.headlineSmall,
@@ -113,5 +111,4 @@ fun LibraryScreen(
                 }
             }
         }
-    }
 }

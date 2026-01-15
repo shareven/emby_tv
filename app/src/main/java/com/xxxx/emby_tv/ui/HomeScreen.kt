@@ -28,7 +28,6 @@ import com.xxxx.emby_tv.ui.components.BuildItem
 import com.xxxx.emby_tv.ui.components.MenuDialog
 import com.xxxx.emby_tv.ui.components.NoData
 import com.xxxx.emby_tv.ui.components.TopStatusBar
-import com.xxxx.emby_tv.ui.theme.GradientBackground
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable

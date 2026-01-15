@@ -25,7 +25,6 @@ import com.xxxx.emby_tv.AppModel
 import com.xxxx.emby_tv.LocalServer
 import com.xxxx.emby_tv.QrCodeUtils
 import com.xxxx.emby_tv.R
-import com.xxxx.emby_tv.ui.theme.GradientBackground
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.MainScope
@@ -44,6 +43,7 @@ import androidx.compose.ui.input.key.type
 import androidx.navigation.NavController
 import com.xxxx.emby_tv.ui.components.MenuDialog
 import com.xxxx.emby_tv.ui.components.TopStatusBar
+import com.xxxx.emby_tv.ui.theme.ThemeColorManager
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -91,7 +91,9 @@ fun LoginScreen(
     navController: NavController
 ) {
     val scope = rememberCoroutineScope()
-val context = LocalContext.current
+    val context = LocalContext.current
+    val themeColor = ThemeColorManager.getThemeColorById(context, appModel.currentThemeId)
+
     var serverUrl by remember {
         mutableStateOf(
             appModel.savedServerUrl ?: ""
@@ -161,9 +163,9 @@ val context = LocalContext.current
         appModel.checkUpdate()
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(themeColor) {
         withContext(Dispatchers.IO) {
-            val server = LocalServer.startServer { p, h, pt, user, pass ->
+            val server = LocalServer.startServer(themeColor.primaryDark, themeColor.secondaryLight) { p, h, pt, user, pass ->
                 protocol = p
                 host = h
                 port = pt

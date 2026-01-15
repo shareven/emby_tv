@@ -4,6 +4,10 @@
 VERSION=$(grep 'versionName' app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
 APK_NAME="emby_tv-v${VERSION}.apk"
 
+# 更新 README.md 中的版本号
+sed -i '' "s/Newest release: v[0-9.]*/Newest release: v${VERSION}/" README.md
+echo "README.md 版本号已更新: v${VERSION}"
+
 # 构建Release版本
 echo "开始构建Emby TV Release版本..."
 ./gradlew assembleRelease

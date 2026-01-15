@@ -1,12 +1,37 @@
 package com.xxxx.emby_tv
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import android.graphics.Color as AndroidColor
 import fi.iki.elonen.NanoHTTPD
 import java.io.IOException
 
 class LocalServer(port: Int, private val onConfigReceived: (String, String, String, String, String) -> Unit) : NanoHTTPD(port) {
 
     companion object {
-        fun startServer(onConfigReceived: (String, String, String, String, String) -> Unit): LocalServer? {
+        private var themePrimary: String = "#448AFF"
+        private var themeSecondary: String = "#E040FB"
+
+        fun startServer(
+            themePrimaryDark: Color,
+            themeSecondaryLight: Color,
+            onConfigReceived: (String, String, String, String, String) -> Unit
+        ): LocalServer? {
+            val primaryArgb = themePrimaryDark.toArgb()
+            val primaryRgb = AndroidColor.rgb(
+                AndroidColor.red(primaryArgb),
+                AndroidColor.green(primaryArgb),
+                AndroidColor.blue(primaryArgb)
+            )
+            val secondaryArgb = themeSecondaryLight.toArgb()
+            val secondaryRgb = AndroidColor.rgb(
+                AndroidColor.red(secondaryArgb),
+                AndroidColor.green(secondaryArgb),
+                AndroidColor.blue(secondaryArgb)
+            )
+            Companion.themePrimary = String.format("#%06X", 0xFFFFFF and primaryRgb)
+            Companion.themeSecondary = String.format("#%06X", 0xFFFFFF and secondaryRgb)
+
             var port = 4000
             while (port < 4010) {
                 try {
@@ -44,11 +69,15 @@ class LocalServer(port: Int, private val onConfigReceived: (String, String, Stri
                             <meta name="viewport" content="width=device-width, initial-scale=1">
                             <meta charset="UTF-8">
                             <style>
+                                :root {
+                                    --theme-primary: $themePrimary;
+                                    --theme-secondary: $themeSecondary;
+                                }
                                 body {
                                     font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
                                     padding: 0;
                                     margin: 0;
-                                    background: linear-gradient(135deg, #122240 0%, #2e0e36 100%);
+                                    background: linear-gradient(135deg, var(--theme-primary), var(--theme-secondary));
                                     color: white;
                                     display: flex;
                                     justify-content: center;
@@ -67,7 +96,7 @@ class LocalServer(port: Int, private val onConfigReceived: (String, String, Stri
                                 }
                                 h2 { margin-bottom: 20px; font-weight: 300; }
                                 p { color: #ccc; margin-bottom: 30px; }
-                                .icon { font-size: 64px; margin-bottom: 20px; color: #4CAF50; }
+                                .icon { font-size: 64px; margin-bottom: 20px; color: var(--theme-primary); }
                             </style>
                         </head>
                         <body>
@@ -102,11 +131,15 @@ class LocalServer(port: Int, private val onConfigReceived: (String, String, Stri
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <meta charset="UTF-8">
                 <style>
+                    :root {
+                        --theme-primary: $themePrimary;
+                        --theme-secondary: $themeSecondary;
+                    }
                     body {
                         font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
                         padding: 0;
                         margin: 0;
-                        background: linear-gradient(135deg, #122240 0%, #2e0e36 100%);
+                        background: linear-gradient(135deg, var(--theme-primary), var(--theme-secondary));
                         color: white;
                         display: flex;
                         flex-wrap: wrap;
@@ -115,11 +148,8 @@ class LocalServer(port: Int, private val onConfigReceived: (String, String, Stri
                         min-height: 100vh;
                     }
                     .container {
-                        background: rgba(255, 255, 255, 0.1);
+                        background: transparent;
                         padding: 40px 20px;
-                        border-radius: 16px;
-                        backdrop-filter: blur(10px);
-                        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
                         width: 90%;
                         max-width: 400px;
                         margin-top: 20px;
@@ -171,8 +201,7 @@ class LocalServer(port: Int, private val onConfigReceived: (String, String, Stri
                         margin-bottom: 20px;
                     }
                     .protocol-btn.active {
-                        background: rgba(68, 138, 255, 0.5);
-                        border-color: #448AFF;
+                        background: rgba(255, 255, 255, 0.2);
                     }
                     .protocol { flex: 0 0 80px; }
                     .host { flex: 1; }
@@ -189,15 +218,18 @@ class LocalServer(port: Int, private val onConfigReceived: (String, String, Stri
                         font-size: 16px;
                         transition: border-color 0.3s;
                     }
+                    input::placeholder {
+                        color: rgba(255, 255, 255, 0.5);
+                    }
                     input:focus {
-                        border-color: #448AFF;
+                        border-color: var(--theme-primary);
                         outline: none;
                     }
                     button {
                         width: 100%;
                         padding: 14px;
-                        background: linear-gradient(90deg, #448AFF, #E040FB);
-                        color: white;
+                        background: white;
+                        color: black;
                         border: none;
                         border-radius: 8px;
                         font-size: 16px;
@@ -227,9 +259,9 @@ class LocalServer(port: Int, private val onConfigReceived: (String, String, Stri
                             <input type="text" name="port" class="port" placeholder="Port" value="8096">
                         </div>
                         <label id="label-user">Username</label>
-                        <input type="text" name="username" id="input-username" placeholder="Username">
+                        <input type="text" name="username" id="input-username" placeholder="Username" required>
                         <label id="label-pass">Password</label>
-                        <input type="password" name="password" id="input-password" placeholder="Password">
+                        <input type="password" name="password" id="input-password" placeholder="Password" required>
                         <button type="submit" id="btn-submit">Send to TV</button>
                     </form>
                 </div>
