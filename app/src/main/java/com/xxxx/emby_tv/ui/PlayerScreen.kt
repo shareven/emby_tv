@@ -64,6 +64,9 @@ import com.xxxx.emby_tv.model.MediaSourceInfoDto
 import com.xxxx.emby_tv.model.MediaStreamDto
 import com.xxxx.emby_tv.model.SessionDto
 import com.xxxx.emby_tv.ui.components.PlayerMenu
+import com.xxxx.emby_tv.ui.components.PlayerOverlay
+import com.xxxx.emby_tv.ui.components.getAudioTrack
+import com.xxxx.emby_tv.ui.components.getVideoTrack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -121,7 +124,6 @@ fun PlayerScreen(
     var hasTriedTranscodeFallback by remember { mutableStateOf(false) }
     var currentTracks by remember { mutableStateOf<Tracks?>(null) }
 
-    var pendingAutoPlay by remember { mutableStateOf(false) }
 
     val playbackInfoFailText = stringResource(R.string.failed_get_playback_info)
     var playbackTrigger by remember { mutableStateOf(0) }
@@ -308,9 +310,8 @@ fun PlayerScreen(
                             .build()
 
                         player.setMediaItem(mediaItem, position)
-                        pendingAutoPlay = true
-                        player.playWhenReady = false
                         player.prepare()
+                        player.playWhenReady = true
                     }
                 } else {
                     Log.e("PlayerScreen", "转码回退失败：没有找到转码URL")
@@ -340,7 +341,7 @@ fun PlayerScreen(
         selectedAudioIndex = audioIndex
         selectedSubtitleIndex = subIndex
         hasTriedTranscodeFallback = false
-        if (needChange) playbackTrigger++ // 只有手动修改时，才递增触发器，重启协程
+        if (needChange&&!(media.mediaSources?.firstOrNull()?.supportsDirectPlay?:false)) playbackTrigger++ // 只有手动修改时，才递增触发器，重启协程
     }
 
     // 数据加载逻辑
@@ -530,177 +531,176 @@ fun PlayerScreen(
                 Log.d("Player", "Setting initial position via setMediaItem: $startPositionMs ms")
             }
 
-            pendingAutoPlay = true
-            player.playWhenReady = false
             player.prepare()
+            player.playWhenReady = true
         }
     }
 
     // 更新选中字幕
-    LaunchedEffect(selectedSubtitleIndex, subtitleTracks, currentTracks) {
-        if (subtitleTracks.isEmpty()) return@LaunchedEffect
+    // LaunchedEffect(selectedSubtitleIndex, subtitleTracks, currentTracks) {
+    //     if (subtitleTracks.isEmpty()) return@LaunchedEffect
 
-        // 如果是 -1，关闭字幕逻辑
-        if (selectedSubtitleIndex == -1) {
-            player.trackSelectionParameters = player.trackSelectionParameters
-                .buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                .build()
-            return@LaunchedEffect
-        }
+    //     // 如果是 -1，关闭字幕逻辑
+    //     if (selectedSubtitleIndex == -1) {
+    //         player.trackSelectionParameters = player.trackSelectionParameters
+    //             .buildUpon()
+    //             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+    //             .build()
+    //         return@LaunchedEffect
+    //     }
 
-        // Fix: Use find to match by Index, not list index
-        val targetTrack = subtitleTracks.find { it.index == selectedSubtitleIndex }
-            ?: run {
-                Log.w(
-                    "Player",
-                    "Target subtitle index $selectedSubtitleIndex not found in metadata"
-                )
-                return@LaunchedEffect
-            }
+    //     // Fix: Use find to match by Index, not list index
+    //     val targetTrack = subtitleTracks.find { it.index == selectedSubtitleIndex }
+    //         ?: run {
+    //             Log.w(
+    //                 "Player",
+    //                 "Target subtitle index $selectedSubtitleIndex not found in metadata"
+    //             )
+    //             return@LaunchedEffect
+    //         }
 
-        val targetOrdinalIndex = subtitleTracks.indexOf(targetTrack)
-        val targetLabel = targetTrack.displayTitle
-        val targetIndex = targetTrack.index?.toString() ?: ""
-        val targetLanguage = targetTrack.language?.lowercase()
+    //     val targetOrdinalIndex = subtitleTracks.indexOf(targetTrack)
+    //     val targetLabel = targetTrack.displayTitle
+    //     val targetIndex = targetTrack.index?.toString() ?: ""
+    //     val targetLanguage = targetTrack.language?.lowercase()
 
-        // 开启文本轨道
-        var parametersBuilder = player.trackSelectionParameters.buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+    //     // 开启文本轨道
+    //     var parametersBuilder = player.trackSelectionParameters.buildUpon()
+    //         .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
 
-        // 1.5.1 推荐做法：先尝试通过首选语言/标签匹配，增加成功率
-        if (targetLanguage != null) {
-            parametersBuilder =
-                parametersBuilder.setPreferredTextLanguage(targetLanguage)
-        }
+    //     // 1.5.1 推荐做法：先尝试通过首选语言/标签匹配，增加成功率
+    //     if (targetLanguage != null) {
+    //         parametersBuilder =
+    //             parametersBuilder.setPreferredTextLanguage(targetLanguage)
+    //     }
 
-        // 执行强制覆盖逻辑
-        // 使用 currentTracks 进行匹配
-        val groups = currentTracks?.groups ?: player.currentTracks.groups
-        val trackGroups = groups.filter { it.type == C.TRACK_TYPE_TEXT }
-        var isMatched = false
+    //     // 执行强制覆盖逻辑
+    //     // 使用 currentTracks 进行匹配
+    //     val groups = currentTracks?.groups ?: player.currentTracks.groups
+    //     val trackGroups = groups.filter { it.type == C.TRACK_TYPE_TEXT }
+    //     var isMatched = false
 
-        Log.d(
-            "Player",
-            "Subtitle Selection: Target [Index:$targetIndex, Label:$targetLabel, Lang:$targetLanguage, Ordinal:$targetOrdinalIndex]"
-        )
+    //     Log.d(
+    //         "Player",
+    //         "Subtitle Selection: Target [Index:$targetIndex, Label:$targetLabel, Lang:$targetLanguage, Ordinal:$targetOrdinalIndex]"
+    //     )
 
-        // 策略1：遍历所有 Text Track Group 进行多重匹配
-        outer@ for (group in trackGroups) {
-            for (i in 0 until group.length) {
-                val format = group.getTrackFormat(i)
-                val formatId = format.id
-                val formatLabel = format.label
-                val formatLang = format.language?.lowercase()
+    //     // // 策略1：遍历所有 Text Track Group 进行多重匹配
+    //     // outer@ for (group in trackGroups) {
+    //     //     for (i in 0 until group.length) {
+    //     //         val format = group.getTrackFormat(i)
+    //     //         val formatId = format.id
+    //     //         val formatLabel = format.label
+    //     //         val formatLang = format.language?.lowercase()
 
-                // 1. ID 精确匹配 (Emby Index vs ExoPlayer ID)
-                if (formatId == targetIndex) {
-                    parametersBuilder.setOverrideForType(
-                        TrackSelectionOverride(
-                            group.mediaTrackGroup,
-                            i
-                        )
-                    )
-                    isMatched = true
-                    Log.d("Player", "Matched subtitle by ID: $formatId")
-                    break@outer
-                }
+    //     //         // 1. ID 精确匹配 (Emby Index vs ExoPlayer ID)
+    //     //         if (formatId == targetIndex) {
+    //     //             parametersBuilder.setOverrideForType(
+    //     //                 TrackSelectionOverride(
+    //     //                     group.mediaTrackGroup,
+    //     //                     i
+    //     //                 )
+    //     //             )
+    //     //             isMatched = true
+    //     //             Log.d("Player", "Matched subtitle by ID: $formatId")
+    //     //             break@outer
+    //     //         }
 
-                // 2. Label 精确匹配
-                if (formatLabel != null && targetLabel != null && formatLabel.equals(
-                        targetLabel,
-                        ignoreCase = true
-                    )
-                ) {
-                    parametersBuilder.setOverrideForType(
-                        TrackSelectionOverride(
-                            group.mediaTrackGroup,
-                            i
-                        )
-                    )
-                    isMatched = true
-                    Log.d("Player", "Matched subtitle by Label (Exact): $formatLabel")
-                    break@outer
-                }
+    //     //         // 2. Label 精确匹配
+    //     //         if (formatLabel != null && targetLabel != null && formatLabel.equals(
+    //     //                 targetLabel,
+    //     //                 ignoreCase = true
+    //     //             )
+    //     //         ) {
+    //     //             parametersBuilder.setOverrideForType(
+    //     //                 TrackSelectionOverride(
+    //     //                     group.mediaTrackGroup,
+    //     //                     i
+    //     //                 )
+    //     //             )
+    //     //             isMatched = true
+    //     //             Log.d("Player", "Matched subtitle by Label (Exact): $formatLabel")
+    //     //             break@outer
+    //     //         }
 
-                // 3. Label 模糊匹配 (包含关系)
-                if (formatLabel != null && targetLabel != null && (formatLabel.contains(
-                        targetLabel,
-                        true
-                    ) || targetLabel.contains(formatLabel, true))
-                ) {
-                    parametersBuilder.setOverrideForType(
-                        TrackSelectionOverride(
-                            group.mediaTrackGroup,
-                            i
-                        )
-                    )
-                    isMatched = true
-                    Log.d(
-                        "Player",
-                        "Matched subtitle by Label (Fuzzy): Player=$formatLabel / Target=$targetLabel"
-                    )
-                    break@outer
-                }
+    //     //         // 3. Label 模糊匹配 (包含关系)
+    //     //         if (formatLabel != null && targetLabel != null && (formatLabel.contains(
+    //     //                 targetLabel,
+    //     //                 true
+    //     //             ) || targetLabel.contains(formatLabel, true))
+    //     //         ) {
+    //     //             parametersBuilder.setOverrideForType(
+    //     //                 TrackSelectionOverride(
+    //     //                     group.mediaTrackGroup,
+    //     //                     i
+    //     //                 )
+    //     //             )
+    //     //             isMatched = true
+    //     //             Log.d(
+    //     //                 "Player",
+    //     //                 "Matched subtitle by Label (Fuzzy): Player=$formatLabel / Target=$targetLabel"
+    //     //             )
+    //     //             break@outer
+    //     //         }
 
-                // 4. 语言匹配 (Language Code) - 作为较弱的匹配条件
-                // 注意：如果有多个同语言轨道，这里可能会匹配到第一个，所以要在 Label 匹配之后
-                if (targetLanguage != null && formatLang == targetLanguage) {
-                    // 此时不立即 break，而是先标记，继续寻找是否有 Label 匹配的更优解
-                    // 但为了简单，如果上面都没匹配到，我们暂时信任语言匹配
-                    // 这里做一个简单的优化：如果还没找到 Match，记录这个作为备选
-                    // 实际实现：这通常由 exoPlayer 的 setPreferredTextLanguage 处理了，但为了强制覆盖，我们也可以做。
-                    // 风险：可能有多个 "English"，选错了一个 Forced 轨道。
-                    // 暂时跳过纯语言强制匹配，交给 setPreferredTextLanguage，或者仅 Log
-                    Log.d("Player", "Potential match by Language: $formatLang")
-                }
-            }
-        }
+    //     //         // 4. 语言匹配 (Language Code) - 作为较弱的匹配条件
+    //     //         // 注意：如果有多个同语言轨道，这里可能会匹配到第一个，所以要在 Label 匹配之后
+    //     //         if (targetLanguage != null && formatLang == targetLanguage) {
+    //     //             // 此时不立即 break，而是先标记，继续寻找是否有 Label 匹配的更优解
+    //     //             // 但为了简单，如果上面都没匹配到，我们暂时信任语言匹配
+    //     //             // 这里做一个简单的优化：如果还没找到 Match，记录这个作为备选
+    //     //             // 实际实现：这通常由 exoPlayer 的 setPreferredTextLanguage 处理了，但为了强制覆盖，我们也可以做。
+    //     //             // 风险：可能有多个 "English"，选错了一个 Forced 轨道。
+    //     //             // 暂时跳过纯语言强制匹配，交给 setPreferredTextLanguage，或者仅 Log
+    //     //             Log.d("Player", "Potential match by Language: $formatLang")
+    //     //         }
+    //     //     }
+    //     // }
 
-        // 策略2：顺序匹配 (应对 Emby ID 偏移问题，如 Index:3 -> ID:4)
-        if (!isMatched && targetOrdinalIndex != -1) {
-            var trackCounter = 0
-            outerOrdinal@ for (group in trackGroups) {
-                for (i in 0 until group.length) {
-                    val format = group.getTrackFormat(i)
-                    // 假设 ExoPlayer 解析出的文本轨道顺序与 Emby 元数据顺序一致
-                    // 注意：这假设 trackGroups 中只包含我们需要对应的字幕轨道
-                    if (trackCounter == targetOrdinalIndex) {
-                        parametersBuilder.setOverrideForType(
-                            TrackSelectionOverride(group.mediaTrackGroup, i)
-                        )
-                        isMatched = true
-                        Log.d(
-                            "Player",
-                            "Matched subtitle by Ordinal: MetadataIndex=$targetIndex -> ExoOrdinal=$trackCounter (Label: ${format.label})"
-                        )
-                        break@outerOrdinal
-                    }
-                    trackCounter++
-                }
+    //     // 策略2：顺序匹配 (应对 Emby ID 偏移问题，如 Index:3 -> ID:4)
+    //     if (!isMatched && targetOrdinalIndex != -1) {
+    //         var trackCounter = 0
+    //         outerOrdinal@ for (group in trackGroups) {
+    //             for (i in 0 until group.length) {
+    //                 val format = group.getTrackFormat(i)
+    //                 // 假设 ExoPlayer 解析出的文本轨道顺序与 Emby 元数据顺序一致
+    //                 // 注意：这假设 trackGroups 中只包含我们需要对应的字幕轨道
+    //                 if (trackCounter == targetOrdinalIndex) {
+    //                     parametersBuilder.setOverrideForType(
+    //                         TrackSelectionOverride(group.mediaTrackGroup, i)
+    //                     )
+    //                     isMatched = true
+    //                     Log.d(
+    //                         "Player",
+    //                         "Matched subtitle by Ordinal: MetadataIndex=$targetIndex -> ExoOrdinal=$trackCounter (Label: ${format.label})"
+    //                     )
+    //                     break@outerOrdinal
+    //                 }
+    //                 trackCounter++
+    //             }
 
-            }
-        }
+    //         }
+    //     }
 
-        player.trackSelectionParameters = parametersBuilder.build()
+    //     player.trackSelectionParameters = parametersBuilder.build()
 
-        // 调试输出
-        if (!isMatched) {
-            Log.w("Player", "Unable to match subtitle target: $targetLabel")
-            // 打印现有轨道以供调试
-            Log.d("Player", "--- Dump Available Text Tracks ---")
-            trackGroups.forEachIndexed { gi, group ->
-                for (i in 0 until group.length) {
-                    val f = group.getTrackFormat(i)
-                    Log.d(
-                        "Player",
-                        "Group[$gi] Track[$i]: ID=${f.id}, Label=${f.label}, Lang=${f.language}"
-                    )
-                }
-            }
-            Log.d("Player", "----------------------------------")
-        }
-    }
+    //     // 调试输出
+    //     if (!isMatched) {
+    //         Log.w("Player", "Unable to match subtitle target: $targetLabel")
+    //         // 打印现有轨道以供调试
+    //         Log.d("Player", "--- Dump Available Text Tracks ---")
+    //         trackGroups.forEachIndexed { gi, group ->
+    //             for (i in 0 until group.length) {
+    //                 val f = group.getTrackFormat(i)
+    //                 Log.d(
+    //                     "Player",
+    //                     "Group[$gi] Track[$i]: ID=${f.id}, Label=${f.label}, Lang=${f.language}"
+    //                 )
+    //             }
+    //         }
+    //         Log.d("Player", "----------------------------------")
+    //     }
+    // }
 
     // 更新选中音频
     LaunchedEffect(selectedAudioIndex, audioTracks, currentTracks) {
@@ -1028,19 +1028,19 @@ fun PlayerScreen(
                 buffered = player.bufferedPosition.coerceAtLeast(0L)
 
                 // 3. 时长更新由onTimelineChanged处理，这里只需要fallback
-                if (duration <= 0) {
-                    val rawDuration = player.duration
-                    if (rawDuration > 0) {
-                        duration = rawDuration
-                    } else {
-                        // Fallback to metadata duration
-                        val source = media.mediaSources?.firstOrNull()
-                        val runTimeTicks = source?.runTimeTicks ?: 0
-                        if (runTimeTicks > 0) {
-                            duration = runTimeTicks / 10000
-                        }
-                    }
-                }
+                // if (duration <= 0) {
+                //     val rawDuration = player.duration
+                //     if (rawDuration > 0) {
+                //         duration = rawDuration
+                //     } else {
+                //         // Fallback to metadata duration
+                //         val source = media.mediaSources?.firstOrNull()
+                //         val runTimeTicks = source?.runTimeTicks ?: 0
+                //         if (runTimeTicks > 0) {
+                //             duration = runTimeTicks / 10000
+                //         }
+                //     }
+                // }
             }
 
             // 每 800 毫秒更新一次进度
@@ -1076,18 +1076,14 @@ fun PlayerScreen(
                 } else if (state == Player.STATE_READY) {
                     isBuffering = false
                     
-//                    // 在STATE_READY时获取准确时长
-//                    val rawDuration = player.duration
-//                    if (rawDuration > 0) {
-//                        duration = rawDuration
-//                        Log.d("Player", "Duration updated from READY state: $duration ms")
-//                    }
+                   // 在STATE_READY时获取准确时长
+                   val rawDuration = player.duration
+                   if (rawDuration > 0) {
+                       duration = rawDuration
+                       Log.d("Player", "Duration updated from READY state: $duration ms")
+                   }
                 }
 
-                if (state == Player.STATE_READY && pendingAutoPlay) {
-                    pendingAutoPlay = false
-                    player.play()
-                }
 
                 if (state == Player.STATE_ENDED) {
                     isBuffering = false
@@ -1259,6 +1255,7 @@ fun PlayerScreen(
                 duration = duration,
                 buffered = buffered,
                 isPlaying = isPlaying,
+                player = player,
                 isBuffering = isBuffering
             )
 
@@ -1360,465 +1357,3 @@ fun PlayerScreen(
 
 }
 
-
-@Composable
-fun getStreamContainerLine(mediaSource: MediaSourceInfoDto?): String {
-    if (mediaSource == null) return ""
-    val container = mediaSource.container?.uppercase() ?: ""
-    val bitrate = (mediaSource.bitrate) ?: (mediaSource.transcodingBitrate)
-    val bitrateStr = formatMbps(bitrate)
-    if (container.isEmpty() && bitrateStr.isEmpty()) return ""
-    if (bitrateStr.isEmpty()) return container
-    if (container.isEmpty()) return bitrateStr
-    return "$container ($bitrateStr)"
-}
-
-@Composable
-fun getStreamModeLine(session: SessionDto?, mediaSource: MediaSourceInfoDto?): String {
-    val context = LocalContext.current
-
-    // 1. 基础校验：获取播放方法（DirectPlay, DirectStream, Transcode）
-    val playMethod = session?.playState?.playMethod ?: return ""
-    val ti = session.transcodingInfo
-
-    // 2. 解析转码原因 (Transcode Reasons) - 官方风格：每个原因独占一行
-    val reasons = ti?.transcodeReasons ?: emptyList()
-    val reasonTag = if (reasons.isNotEmpty()) {
-        "\n" + reasons.joinToString("\n") { reason ->
-            val resId = context.resources.getIdentifier(reason, "string", context.packageName)
-            if (resId != 0) context.getString(resId) else reason
-        }
-    } else ""
-
-    // 3. 处理：直接播放 (Direct Play)
-    if (playMethod == "DirectPlay") {
-        return stringResource(R.string.direct_play)
-    }
-
-    // 4. 获取流协议与码率信息 (例如: HLS (8 mbps))
-    val container = ti?.container?.uppercase() ?: ""
-    val bitrate = if (ti?.bitrate != null) " (${ti.bitrate / 1000000} mbps)" else ""
-    val protocolInfo = if (container.isNotEmpty()) "$container$bitrate" else ""
-
-    // 5. 处理：直接串流 (Direct Stream)
-    if (playMethod == "DirectStream") {
-        val streamHeader =
-            if (protocolInfo.isNotEmpty()) protocolInfo else stringResource(R.string.direct_stream)
-        // 官方 DirectStream 如果有原因也会换行显示
-        return "$streamHeader$reasonTag"
-    }
-
-    // 6. 处理：转码播放 (Transcode)
-    if (playMethod == "Transcode") {
-        // 硬件加速标识 (⚡)
-        val isHardware = ti?.videoDecoderIsHardware == true || ti?.videoEncoderIsHardware == true
-        val hardwareTag = if (isHardware) " ⚡" else ""
-
-        // 如果没有具体协议信息，使用“转码”作为标题
-        val header =
-            if (protocolInfo.isNotEmpty()) "$protocolInfo$hardwareTag" else "${stringResource(R.string.transcode)}$hardwareTag"
-
-        return "$header$reasonTag"
-    }
-
-    return ""
-}
-
-
-@Composable
-fun getVideoMainLine(
-    videoStream: MediaStreamDto?,
-    session: SessionDto?,
-    mediaSource: MediaSourceInfoDto?,
-): String {
-    if (videoStream == null && mediaSource == null) return ""
-    val displayTitle = videoStream?.displayTitle
-    if (!displayTitle.isNullOrEmpty()) return displayTitle
-
-    val ti = session?.transcodingInfo
-    val isVideoDirect = ti?.isVideoDirect == true
-
-    val height = videoStream?.height
-    val res = if (height != null && height > 0) "${height}p" else ""
-
-    if (ti != null && !isVideoDirect) {
-        var codec = (ti.videoCodec ?: "").uppercase()
-        val bitrate = ti.videoBitrate
-
-        if (codec.isEmpty()) codec = (videoStream?.codec ?: "").uppercase()
-        val bitrateStr = formatMbps(bitrate)
-
-        return listOfNotNull(
-            res.takeIf { it.isNotEmpty() },
-            codec.takeIf { it.isNotEmpty() },
-            bitrateStr.takeIf { it.isNotEmpty() }).joinToString(" ")
-    }
-
-    val codec = (videoStream?.codec ?: "").uppercase()
-    return listOfNotNull(
-        res.takeIf { it.isNotEmpty() },
-        codec.takeIf { it.isNotEmpty() }).joinToString(" ")
-}
-
-@Composable
-fun getVideoDetailLine(videoStream: MediaStreamDto?, mediaSource: MediaSourceInfoDto?): String {
-    if (videoStream == null && mediaSource == null) return ""
-    val profile = (videoStream?.profile ?: "")
-    val levelVal = (videoStream?.level)
-    val level = if (levelVal != null && levelVal > 0) levelVal.toString() else ""
-
-    val fpsVal =
-        (videoStream?.averageFrameRate)?.toString() ?: (videoStream?.realFrameRate)?.toString()
-    val fps = if (!fpsVal.isNullOrEmpty()) "$fpsVal ${stringResource(R.string.fps_suffix)}" else ""
-
-    val bitrateVal = videoStream?.bitRate ?: mediaSource?.bitrate ?: mediaSource?.transcodingBitrate
-    val bitrateStr = formatMbps(bitrateVal)
-
-    return listOfNotNull(
-        profile.takeIf { it.isNotEmpty() },
-        level.takeIf { it.isNotEmpty() },
-        bitrateStr.takeIf { it.isNotEmpty() },
-        fps.takeIf { it.isNotEmpty() }).joinToString(" ")
-}
-
-@Composable
-fun getVideoModeLine(session: SessionDto?, mediaSource: MediaSourceInfoDto?): String {
-    // 基础校验
-    val playMethod = session?.playState?.playMethod ?: return ""
-    val ti = session.transcodingInfo
-
-    // 1. 直接播放 (Direct Play): 无需任何处理，服务器负载最低
-    if (playMethod == "DirectPlay" || ti == null) {
-        return stringResource(R.string.direct_play)
-    }
-
-    val isVideoDirect = ti.isVideoDirect == true
-
-    if (isVideoDirect) {
-        return stringResource(R.string.direct_play)
-    }
-
-    var isHardware = false
-    var vCodec = ""
-    var bitrate: Int? = null
-
-
-    isHardware = ti.videoDecoderIsHardware == true
-    vCodec = (ti.videoCodec ?: "").uppercase()
-    bitrate = ti.videoBitrate ?: ti.bitrate
-
-
-    val mbps = formatMbps(bitrate)
-    val hardwareTag = if (isHardware) "⚡" else ""
-    val codecInfo = listOfNotNull(
-        vCodec.takeIf { it.isNotEmpty() },
-        hardwareTag.takeIf { it.isNotEmpty() },
-        mbps.takeIf { it.isNotEmpty() }).joinToString(" ")
-
-    if (codecInfo.isEmpty()) return stringResource(R.string.transcode)
-    return "${stringResource(R.string.transcode)} ($codecInfo)"
-}
-
-@Composable
-fun getAudioMainLine(
-    audioStream: MediaStreamDto?, // 确保使用的是你的 MediaStream DTO
-    session: SessionDto?,
-    mediaSource: MediaSourceInfoDto?, // MediaSource 通常也是 BaseItemDto 类型
-): String {
-    if (audioStream == null) return ""
-
-
-    val lang = audioStream.language ?: ""
-    val title = audioStream.displayTitle ?: ""
-    val label = if (title.isNotEmpty()) title
-    else if (lang.isNotEmpty()) lang
-    else stringResource(R.string.unknown)
-
-    // 6. 组合字符串
-    return label
-}
-
-@Composable
-fun getAudioDetailLine(audioStream: MediaStreamDto?): String {
-    if (audioStream == null) return ""
-    val bitrate = audioStream.bitRate
-    val sampleRate = audioStream.sampleRate
-
-    val kbps = formatKbps(bitrate)
-    val hz = if (sampleRate != null && sampleRate > 0) "$sampleRate Hz" else ""
-
-    return listOfNotNull(
-        kbps.takeIf { it.isNotEmpty() },
-        hz.takeIf { it.isNotEmpty() }).joinToString(" ")
-}
-
-@Composable
-fun getAudioModeLine(session: SessionDto?, mediaSource: MediaSourceInfoDto?): String {
-    // 基础校验
-    val playMethod = session?.playState?.playMethod ?: return ""
-    val ti = session.transcodingInfo
-
-    // 1. 直接播放 (Direct Play): 无需任何处理，服务器负载最低
-    if (playMethod == "DirectPlay" || ti == null) {
-        return stringResource(R.string.direct_play)
-    }
-
-    val isAudioDirect = ti.isAudioDirect == true
-
-
-    if (isAudioDirect) return stringResource(R.string.direct_play)
-
-    var codec = ""
-    var bitrate: Int? = null
-
-    codec = (ti.audioCodec ?: "").uppercase()
-    bitrate = ti.audioBitrate ?: ti.bitrate
-
-
-    val kbps = formatKbps(bitrate)
-    val info = listOfNotNull(
-        codec.takeIf { it.isNotEmpty() },
-        kbps.takeIf { it.isNotEmpty() }).joinToString(" ")
-
-    if (info.isEmpty()) return stringResource(R.string.transcode)
-    return "${stringResource(R.string.transcode)} ($info)"
-}
-
-fun getVideoTrack(media: MediaDto): MediaStreamDto? {
-    val source = media.mediaSources?.firstOrNull()
-    val streams = source?.mediaStreams
-    return streams?.firstOrNull { it.type == "Video" }
-}
-
-fun getAudioTrack(media: MediaDto, selectedIndex: Int): MediaStreamDto? {
-    val source = media.mediaSources?.firstOrNull()
-    val streams = source?.mediaStreams
-    val audios = streams?.filter { it.type == "Audio" }
-
-    if (audios.isNullOrEmpty()) return null
-
-    return if (selectedIndex != -1) {
-        audios.firstOrNull { it.index == selectedIndex }
-    } else {
-        audios.firstOrNull()
-    }
-}
-
-// ---------------- UI Components ----------------
-
-@Composable
-fun PlayerOverlay(
-    mediaInfo: BaseItemDto,
-    mediaSource: MediaSourceInfoDto?,
-    session: SessionDto?,
-    videoStream: MediaStreamDto?,
-    audioStream: MediaStreamDto?,
-    position: Long,
-    duration: Long,
-    buffered: Long,
-    isPlaying: Boolean,
-    isBuffering: Boolean,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.5f))
-            .padding(16.dp)
-    ) {
-        // Top Info
-        Column(modifier = Modifier.align(Alignment.TopStart)) {
-            val parentIndex = mediaInfo.parentIndexNumber
-            val index = mediaInfo.indexNumber
-            val productionYear = mediaInfo.productionYear?.toString()
-            Text(
-                text = mediaInfo.seriesName ?: mediaInfo.name ?: "",
-                style = TvMaterialTheme.typography.headlineMedium.copy(
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            if (parentIndex != null && index != null) {
-                Text(
-                    text = "S${parentIndex}:E${index} ${mediaInfo.name ?: ""}",
-                    style = TvMaterialTheme.typography.titleMedium.copy(color = Color.White)
-                )
-            } else if (productionYear != null) {
-                Text(
-                    text = productionYear,
-                    style = TvMaterialTheme.typography.titleMedium.copy(color = Color.White)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                text = stringResource(R.string.streaming),
-                color = Color.White,
-                fontSize = 14.sp
-            )
-            Text(text = getStreamContainerLine(mediaSource), color = Color.White, fontSize = 12.sp)
-            Row {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = null,
-                    tint = Color.LightGray,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = getStreamModeLine(session, mediaSource),
-                    color = Color.LightGray,
-                    fontSize = 12.sp,
-                    lineHeight = 15.sp,
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(text = stringResource(R.string.video), color = Color.White, fontSize = 14.sp)
-            Text(
-                text = getVideoMainLine(videoStream, session, mediaSource),
-                color = Color.White,
-                fontSize = 12.sp
-            )
-            Text(
-                text = getVideoDetailLine(videoStream, mediaSource),
-                color = Color.White,
-                fontSize = 12.sp
-            )
-            Row {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = null,
-                    tint = Color.LightGray,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = getVideoModeLine(session, mediaSource),
-                    color = Color.LightGray,
-                    fontSize = 12.sp
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(text = stringResource(R.string.audio), color = Color.White, fontSize = 14.sp)
-            Text(
-                text = getAudioMainLine(audioStream, session, mediaSource),
-                color = Color.White,
-                fontSize = 12.sp
-            )
-            Text(text = getAudioDetailLine(audioStream), color = Color.White, fontSize = 12.sp)
-            Row {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = null,
-                    tint = Color.LightGray,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = getAudioModeLine(session, mediaSource),
-                    color = Color.LightGray,
-                    fontSize = 12.sp
-                )
-            }
-        }
-
-        // Center Play/Loading Icon
-        Box(modifier = Modifier.align(Alignment.Center)) {
-            if (isBuffering) {
-                CircularProgressIndicator(color = Color.White)
-            } else if (!isPlaying) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Paused",
-                    modifier = Modifier.size(100.dp),
-                    tint = Color.White
-                )
-            }
-        }
-
-        // Bottom Progress
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(bottom = 32.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(text = formatDuration(position), color = Color.White)
-                Text(text = formatDuration(duration), color = Color.White)
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .background(Color.Gray)
-            ) {
-                // Buffered
-                if (duration > 0) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .fillMaxWidth(
-                                fraction = (buffered.toFloat() / duration.toFloat()).coerceIn(
-                                    0f,
-                                    1f
-                                )
-                            )
-                            .background(Color.LightGray)
-                    )
-
-                    // Current
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .fillMaxWidth(
-                                fraction = (position.toFloat() / duration.toFloat()).coerceIn(
-                                    0f,
-                                    1f
-                                )
-                            )
-                            .background(TvMaterialTheme.colorScheme.primary)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    Icons.Default.Menu,
-                    contentDescription = null,
-                    tint = Color.LightGray,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = stringResource(R.string.press_menu_to_show_menu),
-                    color = Color.LightGray,
-                    fontSize = 14.sp
-                )
-                Spacer(modifier = Modifier.width(16.dp))
-                Icon(
-                    Icons.Default.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = Color.LightGray,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = stringResource(R.string.press_menu_down_to_show_menu),
-                    color = Color.LightGray,
-                    fontSize = 14.sp
-                )
-            }
-        }
-    }
-}

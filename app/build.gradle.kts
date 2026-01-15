@@ -114,6 +114,4 @@ dependencies {
     // NanoHTTPD
     implementation("org.nanohttpd:nanohttpd:2.3.1")
 
-    // 应用更新库 - 支持下载和安装
-    implementation("io.github.azhon:appupdate:4.3.6")
 }
