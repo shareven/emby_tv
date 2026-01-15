@@ -3,10 +3,10 @@ package com.xxxx.emby_tv
 import fi.iki.elonen.NanoHTTPD
 import java.io.IOException
 
-class LocalServer(port: Int, private val onConfigReceived: (String, String, String) -> Unit) : NanoHTTPD(port) {
+class LocalServer(port: Int, private val onConfigReceived: (String, String, String, String, String) -> Unit) : NanoHTTPD(port) {
 
     companion object {
-        fun startServer(onConfigReceived: (String, String, String) -> Unit): LocalServer? {
+        fun startServer(onConfigReceived: (String, String, String, String, String) -> Unit): LocalServer? {
             var port = 4000
             while (port < 4010) {
                 try {
@@ -27,13 +27,15 @@ class LocalServer(port: Int, private val onConfigReceived: (String, String, Stri
                 val files = HashMap<String, String>()
                 session.parseBody(files)
                 val params = session.parms
-                
-                val url = params["url"] ?: ""
+
+                val protocol = params["protocol"] ?: "http"
+                val host = params["host"] ?: ""
+                val port = params["port"] ?: "8096"
                 val username = params["username"] ?: ""
                 val password = params["password"] ?: ""
-                
-                if (url.isNotEmpty()) {
-                    onConfigReceived(url, username, password)
+
+                if (host.isNotEmpty()) {
+                    onConfigReceived(protocol, host, port, username, password)
                     val successHtml = """
                         <!DOCTYPE html>
                         <html>
@@ -107,18 +109,21 @@ class LocalServer(port: Int, private val onConfigReceived: (String, String, Stri
                         background: linear-gradient(135deg, #122240 0%, #2e0e36 100%);
                         color: white;
                         display: flex;
+                        flex-wrap: wrap;
                         justify-content: center;
-                        align-items: center;
+                        align-items: flex-start;
                         min-height: 100vh;
                     }
                     .container {
                         background: rgba(255, 255, 255, 0.1);
-                        padding: 40px;
+                        padding: 40px 20px;
                         border-radius: 16px;
                         backdrop-filter: blur(10px);
                         box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
                         width: 90%;
                         max-width: 400px;
+                        margin-top: 20px;
+                        margin-bottom: 20px;
                     }
                     h2 {
                         text-align: center;
@@ -132,6 +137,46 @@ class LocalServer(port: Int, private val onConfigReceived: (String, String, Stri
                         font-size: 14px;
                         color: #ccc;
                     }
+                    .input-row {
+                        display: flex;
+                        gap: 8px;
+                        margin-bottom: 20px;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    .input-row input {
+                        width: 100%;
+                        padding: 12px;
+                        box-sizing: border-box;
+                        background: rgba(0, 0, 0, 0.3);
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        border-radius: 8px;
+                        color: white;
+                        font-size: 16px;
+                    }
+                    .input-row input:focus {
+                        border-color: #448AFF;
+                        outline: none;
+                    }
+                    .protocol-btn {
+                        padding: 12px 20px;
+                        background: rgba(255, 255, 255, 0.1);
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        border-radius: 8px;
+                        color: white;
+                        font-size: 16px;
+                        cursor: pointer;
+                        transition: all 0.2s;
+                        min-width: 80px;
+                        margin-bottom: 20px;
+                    }
+                    .protocol-btn.active {
+                        background: rgba(68, 138, 255, 0.5);
+                        border-color: #448AFF;
+                    }
+                    .protocol { flex: 0 0 80px; }
+                    .host { flex: 1; }
+                    .port { flex: 0 0 80px; }
                     input {
                         width: 100%;
                         padding: 12px;
@@ -173,9 +218,14 @@ class LocalServer(port: Int, private val onConfigReceived: (String, String, Stri
             <body>
                 <div class="container">
                     <h2 id="form-title">Emby TV Login</h2>
-                    <form method="POST">
+                    <form method="POST" id="login-form">
                         <label id="label-url">Server URL</label>
-                        <input type="text" name="url" placeholder="http://192.168.1.x:8096" required value="http://">
+                        <div class="input-row">
+                            <input type="hidden" name="protocol" id="protocol-input" value="http">
+                            <button type="button" class="protocol protocol-btn active" id="btn-protocol" onclick="toggleProtocol()">HTTP</button>
+                            <input type="text" name="host" class="host" placeholder="192.168.1.x" required>
+                            <input type="text" name="port" class="port" placeholder="Port" value="8096">
+                        </div>
                         <label id="label-user">Username</label>
                         <input type="text" name="username" id="input-username" placeholder="Username">
                         <label id="label-pass">Password</label>
@@ -184,6 +234,17 @@ class LocalServer(port: Int, private val onConfigReceived: (String, String, Stri
                     </form>
                 </div>
                 <script>
+                    function toggleProtocol() {
+                        var btn = document.getElementById('btn-protocol');
+                        var input = document.getElementById('protocol-input');
+                        if (input.value === 'http') {
+                            input.value = 'https';
+                            btn.innerText = 'HTTPS';
+                        } else {
+                            input.value = 'http';
+                            btn.innerText = 'HTTP';
+                        }
+                    }
                     if (navigator.language.startsWith('zh')) {
                         document.getElementById('form-title').innerText = 'Emby TV 登录';
                         document.getElementById('label-url').innerText = '服务器地址';
@@ -193,6 +254,33 @@ class LocalServer(port: Int, private val onConfigReceived: (String, String, Stri
                         document.getElementById('input-password').placeholder = '密码';
                         document.getElementById('btn-submit').innerText = '发送到电视';
                     }
+                    var lastScrollY = 0;
+                    if (window.visualViewport) {
+                        window.visualViewport.addEventListener('resize', function() {
+                            var container = document.querySelector('.container');
+                            if (window.visualViewport.height < window.innerHeight) {
+                                var diff = window.innerHeight - window.visualViewport.height;
+                                var containerBottom = container.getBoundingClientRect().bottom;
+                                if (containerBottom > window.visualViewport.height - 50) {
+                                    var scrollAmount = containerBottom - (window.visualViewport.height - 100);
+                                    window.scrollTo({ top: scrollAmount, behavior: 'smooth' });
+                                }
+                            } else {
+                                if (lastScrollY > 0) {
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }
+                            }
+                        });
+                    }
+                    var inputs = document.querySelectorAll('input');
+                    inputs.forEach(function(input) {
+                        input.addEventListener('focus', function() {
+                            setTimeout(function() {
+                                var btn = document.getElementById('btn-submit');
+                                btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 300);
+                        });
+                    });
                 </script>
             </body>
             </html>

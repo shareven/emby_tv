@@ -19,6 +19,7 @@ import com.xxxx.emby_tv.R
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 
 @Composable
 fun TvInputDialog(
@@ -26,26 +27,28 @@ fun TvInputDialog(
     initialValue: String = "",
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isNumber: Boolean = false
 ) {
     var inputText by remember { mutableStateOf(initialValue) }
 
     AlertDialog(
         modifier = modifier,
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface, // Ensure dark background
-        titleContentColor = MaterialTheme.colorScheme.onSurface,
-        textContentColor = MaterialTheme.colorScheme.onSurface,
+        containerColor = MaterialTheme.colorScheme.onSurface,
+
         title = {
-            Text(text = title)
+            Text(text = title, )
         },
         text = {
             OutlinedTextField(
                 value = inputText,
-                onValueChange = { inputText = it },
+                onValueChange = { inputText = if (isNumber) it.filter { c -> c.isDigit() } else it },
                 label = { Text(stringResource(R.string.input_label)) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Done,
+                    keyboardType = if (isNumber) KeyboardType.Number else KeyboardType.Text
+                ),
                 keyboardActions = KeyboardActions(
                     onDone = {
                         onConfirm(inputText)
@@ -60,14 +63,26 @@ fun TvInputDialog(
                 onClick = {
                     onConfirm(inputText)
                     onDismiss()
-                }
+                },
+                colors = ButtonDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.primary,
+                    focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
             ) {
                 Text(stringResource(R.string.confirm))
             }
         },
         dismissButton = {
             Button(
-                onClick = onDismiss
+                onClick = onDismiss,
+                colors = ButtonDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.primary,
+                    focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
             ) {
                 Text(stringResource(R.string.cancel))
             }

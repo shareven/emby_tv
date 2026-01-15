@@ -2,6 +2,8 @@
     <string name="app_name">Emby TV</string>
     <string name="new_version_available">New version available: %1$s</string>
     <string name="server_url">Server URL</string>
+    <string name="host">Host</string>
+    <string name="port">Port</string>
     <string name="username">Username</string>
     <string name="password">Password</string>
     <string name="logging_in">Logging in…</string>

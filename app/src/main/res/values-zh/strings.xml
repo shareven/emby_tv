@@ -3,6 +3,8 @@
     <string name="new_version_available">新版本可用</string>
     <string name="info">信息</string>
     <string name="server_url">服务器地址</string>
+    <string name="host">域名</string>
+    <string name="port">端口</string>
     <string name="username">用户名</string>
     <string name="password">密码</string>
     <string name="logging_in">登录中…</string>

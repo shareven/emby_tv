@@ -45,6 +45,44 @@ import androidx.navigation.NavController
 import com.xxxx.emby_tv.ui.components.MenuDialog
 import com.xxxx.emby_tv.ui.components.TopStatusBar
 
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun ProtocolButton(
+    protocol: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
+        border = ClickableSurfaceDefaults.border(
+            border = Border(
+                BorderStroke(
+                    2.dp,
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+            ),
+            focusedBorder = Border(BorderStroke(2.dp, MaterialTheme.colorScheme.primary))
+        ),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            focusedContainerColor = MaterialTheme.colorScheme.onSurface,
+            focusedContentColor = MaterialTheme.colorScheme.surface,
+        ),
+        modifier = modifier.height(64.dp)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = protocol.uppercase(),
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -59,24 +97,76 @@ val context = LocalContext.current
             appModel.savedServerUrl ?: ""
         )
     }
-    var username by remember { mutableStateOf( appModel.savedUsername) }
-    var password by remember { mutableStateOf(  appModel.savedPassword) }
-
-    // Focus Requesters
-    val urlFocusRequester = remember { FocusRequester() }
-    val loginButtonFocusRequester = remember { FocusRequester() }
+    var protocol by remember { mutableStateOf("http") }
+    var host by remember { mutableStateOf("shareven.sbs") }
+    var port by remember { mutableStateOf("8096") }
+    var username by remember { mutableStateOf( "shareven"?:appModel.savedUsername) }
+    var password by remember { mutableStateOf( "xrw920406"?: appModel.savedPassword) }
 
     // Server & QR Code State
     var qrCodeBitmap by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var localServerAddress by remember { mutableStateOf("") }
-
-    // Hold reference to LocalServer to stop it later
     var localServer by remember { mutableStateOf<com.xxxx.emby_tv.LocalServer?>(null) }
+
+    // Focus Requesters
+    val hostFocusRequester = remember { FocusRequester() }
+    val loginButtonFocusRequester = remember { FocusRequester() }
+
+    // Initial Focus Logic
+    LaunchedEffect(Unit) {
+        if (host.isNotEmpty() && username.isNotEmpty() && password.isNotEmpty()) {
+            loginButtonFocusRequester.requestFocus()
+        } else {
+            hostFocusRequester.requestFocus()
+        }
+    }
+
+    // Dialog states
+    var showServerDialog by remember { mutableStateOf(false) }
+    var showHostDialog by remember { mutableStateOf(false) }
+    var showPortDialog by remember { mutableStateOf(false) }
+    var showUsernameDialog by remember { mutableStateOf(false) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
+
+    fun parseServerUrl(url: String): Triple<String, String, String> {
+        return try {
+            val uri = java.net.URI(url)
+            Triple(
+                uri.scheme ?: "http",
+                uri.host ?: "",
+                uri.port.takeIf { it > 0 }?.toString() ?: "8096"
+            )
+        } catch (e: Exception) {
+            Triple("http", "", "8096")
+        }
+    }
+
+    fun buildServerUrl(p: String, h: String, pt: String): String {
+        return if (h.isNotEmpty()) "$p://$h:$pt" else ""
+    }
+
+    LaunchedEffect(appModel.savedServerUrl) {
+        if (!appModel.savedServerUrl.isNullOrEmpty()) {
+            val (p, h, pt) = parseServerUrl(appModel.savedServerUrl!!)
+            protocol = p
+            host = h
+            port = pt
+        }
+    }
+
+    var showMenu by remember { mutableStateOf(false) }
+    val failText = stringResource(id = R.string.login_failed)
+
+    LaunchedEffect(Unit) {
+        appModel.checkUpdate()
+    }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            val server = LocalServer.startServer { url, user, pass ->
-                serverUrl = url
+            val server = LocalServer.startServer { p, h, pt, user, pass ->
+                protocol = p
+                host = h
+                port = pt
                 username = user
                 password = pass
                 loginButtonFocusRequester.requestFocus()
@@ -95,32 +185,10 @@ val context = LocalContext.current
         }
     }
 
-    // Stop server on dispose
     DisposableEffect(Unit) {
         onDispose {
             localServer?.stop()
         }
-    }
-
-    // Initial Focus Logic
-    LaunchedEffect(Unit) {
-        if (serverUrl.isNotEmpty() && serverUrl != "http://" && username.isNotEmpty() && password.isNotEmpty()) {
-            loginButtonFocusRequester.requestFocus()
-        } else {
-            urlFocusRequester.requestFocus()
-        }
-    }
-
-    // Dialog states
-    var showServerDialog by remember { mutableStateOf(false) }
-    var showUsernameDialog by remember { mutableStateOf(false) }
-    var showPasswordDialog by remember { mutableStateOf(false) }
-
-    var showMenu by remember { mutableStateOf(false) }
-    val failText = stringResource(id = R.string.login_failed)
-
-    LaunchedEffect(Unit) {
-        appModel.checkUpdate()
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -197,13 +265,30 @@ val context = LocalContext.current
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Server URL Input
-                TvInputButton(
-                    value = serverUrl,
-                    label = stringResource(R.string.server_url),
-                    onClick = { showServerDialog = true },
-                    showMenu = { showMenu = true },
-                    modifier = Modifier.focusRequester(urlFocusRequester)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(0.8f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ProtocolButton(
+                        protocol = protocol,
+                        onClick = { protocol = if (protocol == "http") "https" else "http" },
+                        modifier = Modifier.width(80.dp)
+                    )
+                    TvInputButton(
+                        value = host,
+                        label = stringResource(R.string.host),
+                        onClick = { showHostDialog = true },
+                        showMenu = { showMenu = true },
+                        modifier = Modifier.weight(1f).focusRequester(hostFocusRequester)
+                    )
+                    TvInputButton(
+                        value = port,
+                        label = stringResource(R.string.port),
+                        onClick = { showPortDialog = true },
+                        showMenu = { showMenu = true },
+                        modifier = Modifier.width(80.dp)
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -231,7 +316,7 @@ val context = LocalContext.current
 
                 Button(
                     onClick = {
-
+                        serverUrl = buildServerUrl(protocol, host, port)
                         appModel.login(serverUrl, username, password) { success ->
                             if (success) {
                                 // Stop Web Server
@@ -332,15 +417,28 @@ val context = LocalContext.current
     }
 
     // Dialogs
-    if (showServerDialog) {
+    if (showHostDialog) {
         TvInputDialog(
-            title = stringResource(R.string.server_url),
-            initialValue = serverUrl,
+            title = stringResource(R.string.host),
+            initialValue = host,
             onConfirm = {
-                serverUrl = it
-                showServerDialog = false
+                host = it
+                showHostDialog = false
             },
-            onDismiss = { showServerDialog = false }
+            onDismiss = { showHostDialog = false }
+        )
+    }
+
+    if (showPortDialog) {
+        TvInputDialog(
+            title = stringResource(R.string.port),
+            initialValue = port,
+            onConfirm = {
+                port = it.filter { c -> c.isDigit() }
+                showPortDialog = false
+            },
+            onDismiss = { showPortDialog = false },
+            isNumber = true
         )
     }
 
