@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.*
@@ -31,6 +33,7 @@ fun LibraryScreen(
     onNavigateToSeries: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val firstItemFocusRequester = remember { FocusRequester() }
     
     // 获取 serverUrl
     val repository = remember { EmbyRepository.getInstance(context) }
@@ -42,6 +45,13 @@ fun LibraryScreen(
     // 加载数据
     LaunchedEffect(parentId, type) {
         libraryViewModel.loadItems(parentId, type)
+    }
+
+    // 数据加载完成后聚焦到第一个项目
+    LaunchedEffect(libraryItems) {
+        if (libraryItems != null && libraryItems.isNotEmpty()) {
+            firstItemFocusRequester.requestFocus()
+        }
     }
 
     Column(
@@ -83,9 +93,15 @@ fun LibraryScreen(
                 horizontalArrangement = Arrangement.spacedBy(22.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(items, key = { it.id ?: it.hashCode() }) { item ->
+                items(items.size, key = { items[it].id ?: it.hashCode() }) { index ->
+                    val item = items[index]
                     val id = item.id ?: ""
                     if (id.isNotEmpty()) {
+                        val itemModifier = if (index == 0) {
+                            Modifier.fillMaxWidth().focusRequester(firstItemFocusRequester)
+                        } else {
+                            Modifier.fillMaxWidth()
+                        }
                         Column(
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -93,7 +109,7 @@ fun LibraryScreen(
                                 item = item,
                                 imgWidth = imgWidth,
                                 aspectRatio = maxAspectRatio,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = itemModifier,
                                 isMyLibrary = false,
                                 serverUrl = serverUrl,
                                 onItemClick = {
