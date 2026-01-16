@@ -139,6 +139,32 @@ class EmbyRepository private constructor(private val context: Context) {
     }
 
     /**
+     * 搜索媒体项（支持分页）
+     * 
+     * @param query 搜索关键词
+     * @param startIndex 起始索引
+     * @param limit 每页数量
+     * @return Pair<List<BaseItemDto>, Int> 数据列表和总数
+     */
+    suspend fun searchItems(
+        query: String,
+        startIndex: Int = 0,
+        limit: Int = 20
+    ): Pair<List<BaseItemDto>, Int> {
+        requireLoggedIn()
+        return EmbyApi.searchItems(
+            context,
+            session.serverUrl!!,
+            session.apiKey!!,
+            session.deviceId,
+            session.userId!!,
+            query,
+            startIndex,
+            limit
+        )
+    }
+
+    /**
      * 获取收藏列表
      */
     suspend fun getFavoriteItems(): List<BaseItemDto> {

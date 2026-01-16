@@ -156,4 +156,12 @@
     <string name="auto_skip_intro">自动跳过片头</string>
     <string name="manual_skip_intro">手动跳过片头</string>
     <string name="intro_detected">检测到片头</string>
+
+    <!-- Search -->
+    <string name="search">搜索</string>
+    <string name="search_hint">输入搜索关键词</string>
+    <string name="search_results">搜索结果</string>
+    <string name="no_search_results">未找到搜索结果</string>
+    <string name="search_placeholder">搜索电影、剧集&#8230;</string>
+    <string name="search_failed">搜索失败: %1$s</string>
 </resources>

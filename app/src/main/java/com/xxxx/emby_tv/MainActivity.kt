@@ -27,6 +27,7 @@ import com.xxxx.emby_tv.ui.AccountScreen
 import com.xxxx.emby_tv.ui.MediaDetailScreen
 import com.xxxx.emby_tv.ui.HomeScreen
 import com.xxxx.emby_tv.ui.UpdateScreen
+import com.xxxx.emby_tv.ui.SearchScreen
 import com.xxxx.emby_tv.ui.components.BuildGradientBackground
 import com.xxxx.emby_tv.ui.components.Loading
 import com.xxxx.emby_tv.ui.theme.ThemeColorManager
@@ -37,6 +38,7 @@ import com.xxxx.emby_tv.ui.viewmodel.LibraryViewModel
 import com.xxxx.emby_tv.ui.viewmodel.DetailViewModel
 import com.xxxx.emby_tv.ui.viewmodel.PlayerViewModel
 import com.xxxx.emby_tv.ui.viewmodel.UpdateViewModel
+import com.xxxx.emby_tv.ui.viewmodel.SearchViewModel
 
 
 class MainActivity : ComponentActivity() {
@@ -179,6 +181,22 @@ fun EmbyTvApp() {
                             updateViewModel = updateViewModel,
                             onNavigateBack = {
                                 navController.popBackStack()
+                            }
+                        )
+                    }
+
+                    // 搜索页面
+                    composable("search") {
+                        val searchViewModel: SearchViewModel = viewModel()
+                        val loginViewModel: LoginViewModel = viewModel()
+                        SearchScreen(
+                            searchViewModel = searchViewModel,
+                            loginViewModel = loginViewModel,
+                            onNavigateBack = {
+                                navController.popBackStack()
+                            },
+                            onNavigateToSeries = { seriesId ->
+                                navController.navigate("series/$seriesId")
                             }
                         )
                     }

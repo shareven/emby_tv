@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SwitchAccount
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.runtime.*
@@ -45,6 +46,7 @@ fun MenuDialog(
     onUpdate: () -> Unit,
     onThemeChange: (ThemeColor) -> Unit,
     onSwitchAccount: (() -> Unit)? = null,
+    onSearch: (() -> Unit)? = null,
     isShowLogout: Boolean = true
 ) {
     val showThemeSelection = remember { mutableStateOf(false) }
@@ -103,6 +105,18 @@ fun MenuDialog(
                                 modifier = Modifier.focusRequester(firstItemFocusRequester),
                                 primaryColor = currentPrimaryColor
                             )
+                        }
+
+                        // 搜索项
+                        if (onSearch != null) {
+                            menuItems.add {
+                                MenuListItem(
+                                    text = stringResource(R.string.search),
+                                    icon = Icons.Filled.Search,
+                                    onClick = { onSearch(); onDismiss() },
+                                    primaryColor = currentPrimaryColor
+                                )
+                            }
                         }
 
                         // 切换账号项

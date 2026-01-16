@@ -147,6 +147,33 @@ object EmbyApi {
     }
 
     /**
+     * 搜索媒体项
+     * 
+     * @param query 搜索关键词
+     * @param startIndex 起始索引
+     * @param limit 每页数量
+     * @return Pair<List<BaseItemDto>, Int> 数据列表和总数
+     */
+    suspend fun searchItems(
+        context: Context,
+        serverUrl: String,
+        apiKey: String,
+        deviceId: String,
+        userId: String,
+        query: String,
+        startIndex: Int = 0,
+        limit: Int = 20
+    ): Pair<List<BaseItemDto>, Int> {
+        val encodedQuery = java.net.URLEncoder.encode(query, "UTF-8")
+        val url = "/Users/$userId/Items?SearchTerm=$encodedQuery" +
+                "&Fields=BasicSyncInfo,PrimaryImageAspectRatio,ProductionYear,Status,EndDate" +
+                "&StartIndex=$startIndex&SortBy=SortName&SortOrder=Ascending" +
+                "&EnableImageTypes=Primary,Backdrop,Thumb&ImageTypeLimit=1&Recursive=true&Limit=$limit" +
+                "&X-Emby-Token=$apiKey"
+        return httpAsBaseItemDtoListWithTotal(context, serverUrl, apiKey, deviceId, url)
+    }
+
+    /**
      * 获取继续观看列表
      */
     suspend fun getResumeItems(

@@ -72,6 +72,10 @@ fun HomeScreen(
             onSwitchAccount = {
                 showMenu = false
                 onSwitchAccount()
+            },
+            onSearch = {
+                showMenu = false
+                navController.navigate("search")
             }
         )
     }
@@ -88,7 +92,11 @@ fun HomeScreen(
         TopStatusBar(
             currentVersion = mainViewModel.currentVersion,
             newVersion = mainViewModel.newVersion,
-            needUpdate = mainViewModel.needUpdate
+            needUpdate = mainViewModel.needUpdate,
+            showSearchButton = true,
+            onSearchClick = {
+                navController.navigate("search")
+            }
         )
 
         Spacer(modifier = Modifier.height(8.dp))

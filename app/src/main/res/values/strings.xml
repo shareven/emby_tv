@@ -156,4 +156,12 @@
     <string name="auto_skip_intro">Auto Skip Intro</string>
     <string name="manual_skip_intro">Manual Skip Intro</string>
     <string name="intro_detected">Intro detected</string>
+
+    <!-- Search -->
+    <string name="search">Search</string>
+    <string name="search_hint">Enter search term</string>
+    <string name="search_results">Search Results</string>
+    <string name="no_search_results">No results found</string>
+    <string name="search_placeholder">Search for movies, series&#8230;</string>
+    <string name="search_failed">Search failed: %1$s</string>
 </resources>
