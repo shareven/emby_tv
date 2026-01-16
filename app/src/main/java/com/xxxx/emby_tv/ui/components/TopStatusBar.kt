@@ -25,8 +25,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.xxxx.emby_tv.R
 
@@ -74,7 +79,7 @@ fun TopStatusBar(
                 if (needUpdate) {
                     Text(
                         text = " ( ${stringResource(R.string.new_version_available, newVersion)} )",
-                        color = MaterialTheme.colorScheme.primary, // Highlight color
+                        color = MaterialTheme.colorScheme.secondary, // Highlight color
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -83,18 +88,17 @@ fun TopStatusBar(
 
             // 搜索按钮（右侧）
             if (showSearchButton && onSearchClick != null) {
-                androidx.tv.material3.Surface(
+                Surface(
                     onClick = onSearchClick,
                     modifier = Modifier
                         .size(32.dp)
-                        .focusRequester(searchFocusRequester)
-                        .focusable(),
-                    shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.CircleShape),
-                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
-                        containerColor = Color.White.copy(alpha = 0.1f),
-                        focusedContainerColor = Color.White.copy(alpha = 0.3f),
+                        .focusRequester(searchFocusRequester),
+                    shape = ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.CircleShape),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent,
+                        focusedContainerColor = Color.White,
                         contentColor = Color.White,
-                        focusedContentColor = Color.White
+                        focusedContentColor = MaterialTheme.colorScheme.secondary
                     )
                 ) {
                     Box(
@@ -106,7 +110,6 @@ fun TopStatusBar(
                         Icon(
                             imageVector = Icons.Default.Search,
                             contentDescription = stringResource(R.string.search),
-                            tint = Color.White,
                             modifier = Modifier.size(18.dp)
                         )
                     }

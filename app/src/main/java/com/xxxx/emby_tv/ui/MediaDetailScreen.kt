@@ -266,8 +266,8 @@ fun MediaDetailScreen(
                                 .focusRequester(playButtonFocusRequester)
                                 .padding(top = 8.dp),
                             colors = ButtonDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.primary,
-                                focusedContentColor = MaterialTheme.colorScheme.onPrimary
+                                focusedContainerColor = MaterialTheme.colorScheme.secondary,
+                                focusedContentColor = MaterialTheme.colorScheme.onSecondary
                             )
                         ) {
                             val isResume =
@@ -313,7 +313,7 @@ fun MediaDetailScreen(
                         }
                         if (resume != null) Text(
                             text = "S${resume?.parentIndexNumber}:E${resume?.indexNumber} ${resume?.name}",
-                            color = MaterialTheme.colorScheme.onPrimary
+                            color = MaterialTheme.colorScheme.onSecondary
                         )
 
                         // Overview
@@ -360,8 +360,8 @@ fun MediaDetailScreen(
                                     contentColor = if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(
                                         alpha = 0.15f
                                     ),
-                                    focusedContainerColor = MaterialTheme.colorScheme.primary,
-                                    focusedContentColor = MaterialTheme.colorScheme.onPrimary
+                                    focusedContainerColor = MaterialTheme.colorScheme.secondary,
+                                    focusedContentColor = MaterialTheme.colorScheme.onSecondary
 
                                 )
                             ) {

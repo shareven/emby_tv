@@ -59,7 +59,7 @@ fun BuildItem(
     onItemClick: () -> Unit,
     onMenuClick: (() -> Unit)? = null,
 ) {
-    val primaryColor = MaterialTheme.colorScheme.primary
+    val primaryColor = MaterialTheme.colorScheme.secondary
     val isSeries = item.isSeries
     val userData = item.userData
     val isPlayed = userData?.played ?: false
@@ -88,8 +88,8 @@ fun BuildItem(
             containerColor = Color.Black.copy(alpha = 0.2f),
             focusedContainerColor = MaterialTheme.colorScheme.onSurface,
             contentColor = MaterialTheme.colorScheme.onSurface,
-            pressedContentColor = MaterialTheme.colorScheme.primary,
-            focusedContentColor = MaterialTheme.colorScheme.primary
+            pressedContentColor = MaterialTheme.colorScheme.secondary,
+            focusedContentColor = MaterialTheme.colorScheme.secondary
         ),
 
         modifier = modifier

@@ -53,7 +53,7 @@ fun MenuDialog(
     val firstItemFocusRequester = remember { FocusRequester() }
 
     // 获取当前应用的主题色，用于焦点高亮
-    val currentPrimaryColor = MaterialTheme.colorScheme.primary
+    val currentPrimaryColor = MaterialTheme.colorScheme.secondary
 
     if (showThemeSelection.value) {
         ThemeSelectionDialog(
@@ -84,8 +84,8 @@ fun MenuDialog(
                     shape = RoundedCornerShape(24.dp),
                     border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))),
                     colors = SurfaceDefaults.colors(
-                        containerColor = Color(0xFF000000),
-                        contentColor = Color.White
+                        containerColor = MaterialTheme.colorScheme.onPrimary,
+                        contentColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
                     Column(
@@ -97,15 +97,15 @@ fun MenuDialog(
                         val menuItems = mutableListOf<@Composable () -> Unit>()
 
                         // 返回项
-                        menuItems.add {
-                            MenuListItem(
-                                text = stringResource(R.string.back),
-                                icon = Icons.AutoMirrored.Filled.ArrowBack,
-                                onClick = onDismiss,
-                                modifier = Modifier.focusRequester(firstItemFocusRequester),
-                                primaryColor = currentPrimaryColor
-                            )
-                        }
+//                        menuItems.add {
+//                            MenuListItem(
+//                                text = stringResource(R.string.back),
+//                                icon = Icons.AutoMirrored.Filled.ArrowBack,
+//                                onClick = onDismiss,
+//                                modifier = Modifier.focusRequester(firstItemFocusRequester),
+//                                primaryColor = currentPrimaryColor
+//                            )
+//                        }
 
                         // 搜索项
                         if (onSearch != null) {
@@ -272,7 +272,7 @@ fun ThemeSelectionDialog(
                             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(20.dp)),
                             glow = ClickableSurfaceDefaults.glow(
                                 focusedGlow = Glow(
-                                    elevationColor = theme.primary.copy(alpha = 0.5f),
+                                    elevationColor = theme.secondary.copy(alpha = 0.5f),
                                     elevation = 20.dp
                                 )
                             ),
@@ -280,7 +280,7 @@ fun ThemeSelectionDialog(
                                 focusedBorder = Border(BorderStroke(3.dp, Color.White))
                             ),
                             colors = ClickableSurfaceDefaults.colors(
-                                containerColor = Color.DarkGray.copy(alpha = 0.2f)
+                                containerColor = Color.Transparent
                             )
                         ) {
                             Box(modifier = Modifier.fillMaxSize()) {
@@ -290,7 +290,7 @@ fun ThemeSelectionDialog(
                                         .fillMaxSize()
                                         .background(
                                             Brush.linearGradient(
-                                                0.0f to theme.primary,
+                                                0.0f to theme.secondary,
                                                 1.0f to theme.secondary,
                                                 start = Offset.Zero,
                                                 end = Offset.Infinite

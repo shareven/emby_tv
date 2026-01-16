@@ -69,12 +69,12 @@ fun LoginScreen(
     }
 
     // 在初始化时就解析 savedServerUrl
-    val initialParsed = remember { parseServerUrl("http://192.168.2.9:8096"?:loginViewModel.savedServerUrl?:"http://192.168.2.9:8096") }
+    val initialParsed = remember { parseServerUrl(loginViewModel.savedServerUrl?:"") }
     
     // 从 ViewModel 获取保存的值
-    var serverUrl by remember { mutableStateOf("http://192.168.2.9:8096"?:loginViewModel.savedServerUrl) }
+    var serverUrl by remember { mutableStateOf(loginViewModel.savedServerUrl) }
     var protocol by remember { mutableStateOf(initialParsed.first) }
-    var host by remember { mutableStateOf("192.168.2.9"?:initialParsed.second) }
+    var host by remember { mutableStateOf(initialParsed.second) }
     var port by remember { mutableStateOf(initialParsed.third) }
     var username by remember { mutableStateOf(loginViewModel.savedUsername) }
     var password by remember { mutableStateOf(loginViewModel.savedPassword) }
@@ -321,8 +321,8 @@ fun LoginScreen(
                             } else false
                         },
                     colors = ButtonDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.onSurface,
-                        focusedContentColor = MaterialTheme.colorScheme.surface,
+                        focusedContainerColor = MaterialTheme.colorScheme.primary,
+                        focusedContentColor = MaterialTheme.colorScheme.onPrimary,
                         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
                         contentColor = MaterialTheme.colorScheme.onSurface
                     ),
@@ -337,7 +337,7 @@ fun LoginScreen(
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(20.dp),
                                     strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary
+                                    color = MaterialTheme.colorScheme.onSecondary
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Text(
@@ -457,8 +457,8 @@ fun TvInputButton(
         colors = ClickableSurfaceDefaults.colors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
             contentColor = MaterialTheme.colorScheme.onSurface,
-            focusedContainerColor = MaterialTheme.colorScheme.onSurface,
-            focusedContentColor = MaterialTheme.colorScheme.surface,
+            focusedContainerColor = MaterialTheme.colorScheme.primary,
+            focusedContentColor = MaterialTheme.colorScheme.onPrimary,
         ),
         modifier = modifier
             .fillMaxWidth(0.8f)

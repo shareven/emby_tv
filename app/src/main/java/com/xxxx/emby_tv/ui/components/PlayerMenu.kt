@@ -146,8 +146,8 @@ fun PlayerMenu(
                                         alpha = 0.5f
                                     ) else Color.Transparent,
                                     contentColor = if (isSelected) TvMaterialTheme.colorScheme.onSurfaceVariant else Color.White,
-                                    focusedContainerColor = TvMaterialTheme.colorScheme.primary,
-                                    focusedContentColor = TvMaterialTheme.colorScheme.onPrimary
+                                    focusedContainerColor = TvMaterialTheme.colorScheme.secondary,
+                                    focusedContentColor = TvMaterialTheme.colorScheme.onSecondary
                                 )
                             ) {
                                 Text(
@@ -233,7 +233,7 @@ fun InfoTab(
             Text(
                 text = "S${parentIndexNumber} E${indexNumber} · ${mediaInfo.name ?: ""}",
                 style = TvMaterialTheme.typography.titleMedium,
-                color = TvMaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
+                color = TvMaterialTheme.colorScheme.onSecondary.copy(alpha = 0.9f),
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
@@ -280,10 +280,10 @@ fun InfoTab(
                 contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
                 scale = ButtonDefaults.scale(focusedScale = 1.1f),
                 colors = ButtonDefaults.colors(
-                    containerColor = TvMaterialTheme.colorScheme.onPrimary.copy(alpha = 0.1f),
-                    contentColor = TvMaterialTheme.colorScheme.onPrimary,
-                    focusedContainerColor = TvMaterialTheme.colorScheme.primary,
-                    focusedContentColor = TvMaterialTheme.colorScheme.onPrimary,
+                    containerColor = TvMaterialTheme.colorScheme.onSecondary.copy(alpha = 0.1f),
+                    contentColor = TvMaterialTheme.colorScheme.onSecondary,
+                    focusedContainerColor = TvMaterialTheme.colorScheme.secondary,
+                    focusedContentColor = TvMaterialTheme.colorScheme.onSecondary,
                 )
             ) {
                 Icon(
@@ -448,8 +448,8 @@ fun SubtitlesTab(tracks: List<MediaStreamDto>, selectedIndex: Int, onSelect: (In
                 onClick = { onSelect(-1) },
                 shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
                 colors = ClickableSurfaceDefaults.colors(
-                    focusedContainerColor = TvMaterialTheme.colorScheme.primary,
-                    focusedContentColor = TvMaterialTheme.colorScheme.onPrimary,
+                    focusedContainerColor = TvMaterialTheme.colorScheme.secondary,
+                    focusedContentColor = TvMaterialTheme.colorScheme.onSecondary,
                     containerColor = if (isSelected) TvMaterialTheme.colorScheme.surfaceVariant.copy(
                         alpha = 0.5f
                     ) else Color.Transparent,
@@ -489,8 +489,8 @@ fun SubtitlesTab(tracks: List<MediaStreamDto>, selectedIndex: Int, onSelect: (In
                 onClick = { onSelect(index) },
                 shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
                 colors = ClickableSurfaceDefaults.colors(
-                    focusedContainerColor = TvMaterialTheme.colorScheme.primary,
-                    focusedContentColor = TvMaterialTheme.colorScheme.onPrimary,
+                    focusedContainerColor = TvMaterialTheme.colorScheme.secondary,
+                    focusedContentColor = TvMaterialTheme.colorScheme.onSecondary,
                     containerColor = if (isSelected) TvMaterialTheme.colorScheme.surfaceVariant.copy(
                         alpha = 0.5f
                     ) else Color.Transparent,
@@ -537,8 +537,8 @@ fun AudioTab(tracks: List<MediaStreamDto>, selectedIndex: Int, onSelect: (Int) -
                 onClick = { onSelect(index) },
                 shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
                 colors = ClickableSurfaceDefaults.colors(
-                    focusedContainerColor = TvMaterialTheme.colorScheme.primary,
-                    focusedContentColor = TvMaterialTheme.colorScheme.onPrimary,
+                    focusedContainerColor = TvMaterialTheme.colorScheme.secondary,
+                    focusedContentColor = TvMaterialTheme.colorScheme.onSecondary,
                     containerColor = if (isSelected) TvMaterialTheme.colorScheme.surfaceVariant.copy(
                         alpha = 0.5f
                     ) else Color.Transparent,
@@ -583,8 +583,8 @@ fun PlaybackCorrectionTab(current: Int, onChange: (Int) -> Unit) {
                 onClick = { onChange(value) },
                 shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
                 colors = ClickableSurfaceDefaults.colors(
-                    focusedContainerColor = TvMaterialTheme.colorScheme.primary,
-                    focusedContentColor = TvMaterialTheme.colorScheme.onPrimary,
+                    focusedContainerColor = TvMaterialTheme.colorScheme.secondary,
+                    focusedContentColor = TvMaterialTheme.colorScheme.onSecondary,
                     containerColor = if (isSelected) TvMaterialTheme.colorScheme.surfaceVariant.copy(
                         alpha = 0.5f
                     ) else Color.Transparent,
@@ -630,8 +630,8 @@ fun PlayModeTab(current: Int, onChange: (Int) -> Unit) {
                 onClick = { onChange(index) },
                 shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
                 colors = ClickableSurfaceDefaults.colors(
-                    focusedContainerColor = TvMaterialTheme.colorScheme.primary,
-                    focusedContentColor = TvMaterialTheme.colorScheme.onPrimary,
+                    focusedContainerColor = TvMaterialTheme.colorScheme.secondary,
+                    focusedContentColor = TvMaterialTheme.colorScheme.onSecondary,
                     containerColor = if (isSelected) TvMaterialTheme.colorScheme.surfaceVariant.copy(
                         alpha = 0.5f
                     ) else Color.Transparent,
@@ -679,8 +679,8 @@ fun IntroSkipTab(
                 onClick = { onAutoSkipIntroChange(value) },
                 shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
                 colors = ClickableSurfaceDefaults.colors(
-                    focusedContainerColor = TvMaterialTheme.colorScheme.primary,
-                    focusedContentColor = TvMaterialTheme.colorScheme.onPrimary,
+                    focusedContainerColor = TvMaterialTheme.colorScheme.secondary,
+                    focusedContentColor = TvMaterialTheme.colorScheme.onSecondary,
                     containerColor = if (isSelected) TvMaterialTheme.colorScheme.surfaceVariant.copy(
                         alpha = 0.5f
                     ) else Color.Transparent,

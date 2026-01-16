@@ -82,7 +82,7 @@ fun ResumePlaybackButtons(
             Surface(
                 onClick = onPlayFromStart,
                 modifier = Modifier.height(48.dp),
-                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(28.dp)),
                 scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
                 border = ClickableSurfaceDefaults.border(
                     border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))),
@@ -103,7 +103,7 @@ fun ResumePlaybackButtons(
                 ) {
                     Text(
                         text = stringResource(R.string.play_from_start),
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -116,7 +116,7 @@ fun ResumePlaybackButtons(
                 modifier = Modifier
                     .height(48.dp)
                     .focusRequester(continueButtonFocusRequester),
-                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(28.dp)),
                 scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
                 border = ClickableSurfaceDefaults.border(
                     border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))),
@@ -137,7 +137,7 @@ fun ResumePlaybackButtons(
                 ) {
                     Text(
                         text = stringResource(R.string.continue_playback),
-                        fontSize = 16.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Medium
                     )
                 }

@@ -84,7 +84,7 @@ fun SkipIntroButton(
                 modifier = Modifier
                     .height(48.dp)
                     .focusRequester(skipButtonFocusRequester),
-                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(28.dp)),
                 scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
                 border = ClickableSurfaceDefaults.border(
                     border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))),
@@ -105,7 +105,7 @@ fun SkipIntroButton(
                 ) {
                     Text(
                         text = stringResource(R.string.skip_intro),
-                        fontSize = 16.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Medium
                     )
                 }

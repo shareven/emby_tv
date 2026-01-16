@@ -65,8 +65,8 @@ fun TvInputDialog(
                     onDismiss()
                 },
                 colors = ButtonDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.primary,
-                    focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+                    focusedContainerColor = MaterialTheme.colorScheme.secondary,
+                    focusedContentColor = MaterialTheme.colorScheme.onSecondary,
                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
                     contentColor = MaterialTheme.colorScheme.onSurface
                 ),
@@ -78,8 +78,8 @@ fun TvInputDialog(
             Button(
                 onClick = onDismiss,
                 colors = ButtonDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.primary,
-                    focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+                    focusedContainerColor = MaterialTheme.colorScheme.secondary,
+                    focusedContentColor = MaterialTheme.colorScheme.onSecondary,
                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
                     contentColor = MaterialTheme.colorScheme.onSurface
                 ),

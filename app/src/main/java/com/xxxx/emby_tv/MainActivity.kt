@@ -192,6 +192,7 @@ fun EmbyTvApp() {
                         SearchScreen(
                             searchViewModel = searchViewModel,
                             loginViewModel = loginViewModel,
+                            mainViewModel = mainViewModel,
                             onNavigateBack = {
                                 navController.popBackStack()
                             },

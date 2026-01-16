@@ -46,8 +46,33 @@ fun Emby_tvTheme(
 
     )
 
+    val embyTvColorScheme = darkColorScheme(
+        // 【核心】焦点状态：使用纯白，产生最高亮度对比
+        primary = Color(0xFFFFFFFF),
+        onPrimary = Color(0xFF000000),
+
+        // 【核心】非焦点选中态：使用半透明白，不破坏背景的彩色连续性
+        primaryContainer = Color.White.copy(alpha = 0.15f),
+        onPrimaryContainer = Color.White,
+
+        // 【点缀】将品牌色退居二线，仅用于文字强调或小图标
+        secondary = themeColor.primary,
+        onSecondary = Color.White,
+
+        // 【底座】卡片背景：必须是半透明黑，用来压住彩色背景，防止文字看不清
+        surfaceVariant = Color.Black.copy(alpha = 0.4f),
+        onSurfaceVariant = Color(0xFFD1D1D1),
+
+        // 全局背景设为透明，以显示底层的 themeColor 渐变
+        background = Color.Transparent,
+        onBackground = Color.White,
+
+        surface = Color.Black.copy(alpha = 0.4f),
+        onSurface = Color.White
+    )
+
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = embyTvColorScheme,
         content = content
     )
 }
