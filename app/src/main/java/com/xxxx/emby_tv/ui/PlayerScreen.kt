@@ -55,6 +55,7 @@ import androidx.media3.ui.PlayerView
 import androidx.compose.ui.res.stringResource
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
@@ -72,9 +73,16 @@ import com.xxxx.emby_tv.data.model.SessionDto
 import com.xxxx.emby_tv.ui.components.PlayerMenu
 import com.xxxx.emby_tv.ui.components.PlayerOverlay
 import com.xxxx.emby_tv.ui.components.ResumePlaybackButtons
+import com.xxxx.emby_tv.ui.components.SkipIntroButton
 import com.xxxx.emby_tv.ui.components.getAudioTrack
 import com.xxxx.emby_tv.ui.components.getVideoTrack
+import com.xxxx.emby_tv.ui.player.PlayerReporting
+import com.xxxx.emby_tv.ui.player.PlayerTrackManager
+import com.xxxx.emby_tv.ui.player.SubtitleConfigBuilder
 import com.xxxx.emby_tv.ui.viewmodel.PlayerViewModel
+import com.xxxx.emby_tv.util.ErrorHandler
+import com.xxxx.emby_tv.util.IntroSkipHelper
+import com.xxxx.emby_tv.data.local.PreferencesManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -140,6 +148,14 @@ fun PlayerScreen(
     var hasTriedTranscodeFallback by remember { mutableStateOf(false) }
     var currentTracks by remember { mutableStateOf<Tracks?>(null) }
 
+    // 片头跳过相关状态
+    val preferencesManager = remember { PreferencesManager(context) }
+    var introStartMs by remember { mutableStateOf<Long?>(null) }
+    var introEndMs by remember { mutableStateOf<Long?>(null) }
+    var showSkipIntroButton by remember { mutableStateOf(false) }
+    var autoSkipIntro by remember { mutableStateOf(preferencesManager.autoSkipIntro) }
+    var hasAutoSkipped by remember { mutableStateOf(false) }
+
 
     val playbackInfoFailText = stringResource(R.string.failed_get_playback_info)
     var playbackTrigger by remember { mutableStateOf(0) }
@@ -160,10 +176,25 @@ fun PlayerScreen(
         setEnableDecoderFallback(true)
     }
 
+    // 缓存控制配置 - 针对 TV 端视频流媒体优化
+    val loadControl = remember {
+        DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                30_000,      // 最小缓冲时长 30 秒（开始播放前需要缓冲的最少时长）
+                120_000,     // 最大缓冲时长 120 秒（最多缓存 2 分钟内容）
+                2_500,       // 播放开始缓冲 2.5 秒（首次播放需要的最小缓冲）
+                5_000        // 重新缓冲时长 5 秒（缓冲耗尽后重新开始播放需要的缓冲）
+            )
+            .setTargetBufferBytes(100 * 1024 * 1024) // 目标缓存大小 100MB（适合 4K 内容）
+            .setPrioritizeTimeOverSizeThresholds(true) // 优先保证时间缓冲而非大小限制
+            .build()
+    }
+
     // ExoPlayer
     val player = remember {
         ExoPlayer.Builder(context, renderersFactory)
             .setTrackSelector(trackSelector)
+            .setLoadControl(loadControl)
             .setSeekBackIncrementMs(10000)
             .setSeekForwardIncrementMs(10000)
             .setAudioAttributes(
@@ -175,7 +206,6 @@ fun PlayerScreen(
             )
             .setHandleAudioBecomingNoisy(true)
             .build().apply {
-
                 playWhenReady = true // Ensure it tries to play immediately
             }
     }
@@ -186,48 +216,17 @@ fun PlayerScreen(
     var leftKeyDownTime by remember { mutableStateOf(0L) }
     var rightKeyDownTime by remember { mutableStateOf(0L) }
 
+    // 使用 PlayerReporting 报告播放停止
     fun reportStopped() {
-        // 播放结束，发送停止报告
-        val ticks = position * 10000
-
-        // 提取 MediaSource 逻辑，避免在 mapOf 内部写过于复杂的嵌套
-        val mediaSources = media.mediaSources
-        val firstSource = mediaSources?.firstOrNull()
-        val runTimeTicks = firstSource?.runTimeTicks ?: 0L
-        val mediaSourceId = firstSource?.id ?: ""
-
-        val body = mapOf(
-            "VolumeLevel" to 100,
-            "IsMuted" to false,
-            "IsPaused" to true,
-            "RepeatMode" to "RepeatNone",
-            "Shuffle" to false,
-            "SubtitleOffset" to 0,
-            "PlaybackRate" to 1,
-            "MaxStreamingBitrate" to 200000000,
-            "PositionTicks" to ticks,
-            "PlaybackStartTimeTicks" to System.currentTimeMillis() * 10000,
-            "SubtitleStreamIndex" to selectedSubtitleIndex,
-            "AudioStreamIndex" to selectedAudioIndex,
-            "BufferedRanges" to emptyList<Any>(),
-            "SeekableRanges" to listOf(
-                mapOf("start" to 0, "end" to runTimeTicks)
-            ),
-            "PlayMethod" to Utils.determinePlayMethod(media),
-            "PlaySessionId" to (media.playSessionId ?: ""),
-            "MediaSourceId" to mediaSourceId,
-            "CanSeek" to true,
-            "ItemId" to mediaId,
-            "EventName" to "Stopped"
-        )
-       
-        // 2. 执行停止报告
-        scope.launch(Dispatchers.IO) {
-            try {
-                repository.stopped(body)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+        scope.launch {
+            PlayerReporting.reportStopped(
+                repository = repository,
+                mediaId = mediaId,
+                media = media,
+                position = position,
+                selectedSubtitleIndex = selectedSubtitleIndex,
+                selectedAudioIndex = selectedAudioIndex
+            )
         }
     }
 
@@ -351,7 +350,7 @@ fun PlayerScreen(
             val prefs = context.getSharedPreferences("emby_tv_prefs", Context.MODE_PRIVATE)
             playMode = prefs.getInt("play_mode", 0)
         } catch (e: Exception) {
-            e.printStackTrace()
+            ErrorHandler.logError("PlayerScreen", "操作失败", e)
         }
     }
 
@@ -407,6 +406,19 @@ fun PlayerScreen(
             val source = mediaResult.mediaSources.firstOrNull()
             val streams = source?.mediaStreams ?: emptyList()
 
+            // 检测片头信息
+            val introRange = IntroSkipHelper.detectIntroRange(source?.chapters)
+            if (introRange != null) {
+                introStartMs = introRange.first
+                introEndMs = introRange.second
+                hasAutoSkipped = false // 重置自动跳过标志
+            } else {
+                introStartMs = null
+                introEndMs = null
+                showSkipIntroButton = false
+                hasAutoSkipped = false
+            }
+
             subtitleTracks = streams.filter { s ->
                 s.type == "Subtitle"
             }
@@ -437,7 +449,7 @@ fun PlayerScreen(
             videoUrl = if (path != null) "${serverUrl}/emby$path" else null
             hasReportedPlaying = false
         } catch (e: Exception) {
-            e.printStackTrace()
+            ErrorHandler.logError("PlayerScreen", "操作失败", e)
 
         }
     }
@@ -448,55 +460,15 @@ fun PlayerScreen(
             val source = media.mediaSources?.firstOrNull()
             val mediaSourceId = source?.id ?: ""
 
-            val subtitleConfigs = mutableListOf<MediaItem.SubtitleConfiguration>()
-
-            // 添加所有字幕 (External + Internal extracted)
-            // Emby 允许通过 API 提取内置字幕，这能避免转码流丢失字幕的问题
-            Log.d("Player", "=== Building Subtitle Configurations ===")
-            Log.d("Player", "Total subtitleTracks: ${subtitleTracks.size}")
-            
-            subtitleTracks.forEach { track ->
-                val index = track.index ?: 0
-                val codec = track.codec?.lowercase() ?: "srt"
-                val lang = track.language ?: "und"
-                val label = track.displayTitle ?: "Subtitle"
-
-                // 关键修改：基于Emby返回的数据，支持所有可外部访问的字幕
-                val isLoadableSubtitle = track.supportsExternalStream == true || track.isExternal == true
-                
-                Log.d("Player", "Track[$index]: Codec=$codec, IsExternal=${track.isExternal}, SupportsExternal=${track.supportsExternalStream}, Loadable=$isLoadableSubtitle")
-               
-                if (isLoadableSubtitle) {
-                    // 构建字幕 URL
-                    // Emby 服务器支持字幕格式转换，统一请求为 SRT 格式以确保 ExoPlayer 兼容性
-                    // ASS/SSA 字幕在 ExoPlayer 中渲染支持有限，转为 SRT 更可靠
-                    val requestFormat = when {
-                        codec.contains("vtt") -> "vtt"
-                        else -> "srt" // 将 ass/ssa/subrip 等统一转为 srt
-                    }
-                    val subUrl =
-                        "${serverUrl}/emby/Videos/$mediaId/$mediaSourceId/Subtitles/$index/Stream.$requestFormat?api_key=${apiKey}"
-
-                    val mimeType = when (requestFormat) {
-                        "vtt" -> MimeTypes.TEXT_VTT
-                        else -> MimeTypes.APPLICATION_SUBRIP
-                    }
-
-                    // 使用 "Label [Index]" 格式作为唯一标识，避免 ExoPlayer 自动去重导致匹配失败
-                    val uniqueLabel = "$label [$index]"
-                    val config = MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl))
-                        .setId(index.toString()) // 设置 ID 与 Emby Index 一致
-                        .setMimeType(mimeType)
-                        .setLanguage(lang)
-                        .setLabel(uniqueLabel)
-                        .setSelectionFlags(if (index == selectedSubtitleIndex) C.SELECTION_FLAG_DEFAULT else 0)
-                        .build()
-                    subtitleConfigs.add(config)
-                    Log.d("Player", "Added subtitle config: Index=$index, URL=$subUrl")
-                 } 
-            }
-            Log.d("Player", "Total subtitle configs added: ${subtitleConfigs.size}")
-
+            // 使用 SubtitleConfigBuilder 构建字幕配置
+            val subtitleConfigs = SubtitleConfigBuilder.buildSubtitleConfigs(
+                subtitleTracks = subtitleTracks,
+                serverUrl = serverUrl,
+                mediaId = mediaId,
+                mediaSourceId = mediaSourceId,
+                apiKey = apiKey,
+                selectedSubtitleIndex = selectedSubtitleIndex
+            )
            
             val mediaItemBuilder = MediaItem.Builder()
                 .setUri(videoUrl)
@@ -525,176 +497,14 @@ fun PlayerScreen(
         }
     }
 
-    // 更新选中字幕
-    // 外置字幕和支持外部流的字幕通过 SubtitleConfiguration 加载，使用 ID 匹配
-    // 内嵌字幕（直接播放）使用顺序匹配
+    // 更新选中字幕 - 使用 PlayerTrackManager
     LaunchedEffect(selectedSubtitleIndex, subtitleTracks, currentTracks) {
-        if (subtitleTracks.isEmpty()) return@LaunchedEffect
-
-        // 如果是 -1，关闭字幕
-        if (selectedSubtitleIndex == -1) {
-            player.trackSelectionParameters = player.trackSelectionParameters
-                .buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                .build()
-            Log.d("Player", "Subtitle disabled")
-            return@LaunchedEffect
-        }
-
-        // 找到目标字幕
-        val targetTrack = subtitleTracks.find { it.index == selectedSubtitleIndex }
-            ?: run {
-                Log.w("Player", "Target subtitle index $selectedSubtitleIndex not found in metadata")
-                return@LaunchedEffect
-            }
-
-        val targetOrdinalIndex = subtitleTracks.indexOf(targetTrack)
-        val targetLabel = targetTrack.displayTitle
-        val targetIndex = targetTrack.index?.toString() ?: ""
-        // 判断是否通过 SubtitleConfiguration 加载（外置或支持外部流）
-        val isLoadedViaConfig = targetTrack.supportsExternalStream == true || targetTrack.isExternal == true
-
-        Log.d("Player", "Subtitle Selection: Target [EmbyIndex:$targetIndex, Label:$targetLabel, OrdinalIndex:$targetOrdinalIndex, LoadedViaConfig:$isLoadedViaConfig]")
-
-        // 开启文本轨道
-        var parametersBuilder = player.trackSelectionParameters.buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-
-        val groups = currentTracks?.groups ?: player.currentTracks.groups
-        val trackGroups = groups.filter { it.type == C.TRACK_TYPE_TEXT }
-        var isMatched = false
-
-        // 打印可用字幕轨道
-        Log.d("Player", "--- Available Text Tracks ---")
-        trackGroups.forEachIndexed { gi, group ->
-            for (i in 0 until group.length) {
-                val f = group.getTrackFormat(i)
-                Log.d("Player", "Group[$gi] Track[$i]: ID=${f.id}, Label=${f.label}, Lang=${f.language}")
-            }
-        }
-
-        if (isLoadedViaConfig) {
-            // 策略1：使用唯一 Label 格式 "Label [Index]" 匹配（我们在 SubtitleConfiguration 中设置的）
-            val uniqueTargetLabel = "$targetLabel [$targetIndex]"
-        outer@ for (group in trackGroups) {
-            for (i in 0 until group.length) {
-                val format = group.getTrackFormat(i)
-                    if (format.label == uniqueTargetLabel) {
-                    parametersBuilder.setOverrideForType(
-                        TrackSelectionOverride(group.mediaTrackGroup, i)
-                    )
-                    isMatched = true
-                        Log.d("Player", "Matched subtitle by UniqueLabel: ${format.label} -> ID:${format.id}")
-                    break@outer
-                }
-                }
-            }
-            
-            // 策略1.1：ID 包含 index 匹配（回退）
-            if (!isMatched) {
-                outer2@ for (group in trackGroups) {
-                    for (i in 0 until group.length) {
-                        val format = group.getTrackFormat(i)
-                        // ExoPlayer ID 格式可能是 "5:7" 或 "0:subs:Label"，检查是否包含目标 index
-                        if (format.id?.endsWith(":$targetIndex") == true || format.id == targetIndex) {
-                    parametersBuilder.setOverrideForType(
-                        TrackSelectionOverride(group.mediaTrackGroup, i)
-                    )
-                    isMatched = true
-                            Log.d("Player", "Matched subtitle by ID contains: ${format.id} -> Label:${format.label}")
-                            break@outer2
-                        }
-                    }
-                }
-            }
-        }
-
-        // 策略2：顺序匹配（用于直接播放的内嵌字幕，不包含外置字幕）
-        if (!isMatched && !isLoadedViaConfig && targetOrdinalIndex >= 0) {
-            var trackCounter = 0
-            outerOrdinal@ for (group in trackGroups) {
-                for (i in 0 until group.length) {
-                    if (trackCounter == targetOrdinalIndex) {
-                        parametersBuilder.setOverrideForType(
-                            TrackSelectionOverride(group.mediaTrackGroup, i)
-                        )
-                        isMatched = true
-                        val f = group.getTrackFormat(i)
-                        Log.d("Player", "Matched subtitle by Ordinal: OrdinalIndex=$targetOrdinalIndex -> Track (ID:${f.id}, Label:${f.label})")
-                        break@outerOrdinal
-                    }
-                    trackCounter++
-                }
-            }
-        }
-
-        if (isMatched) {
-        player.trackSelectionParameters = parametersBuilder.build()
-        } else {
-            Log.w("Player", "Unable to match subtitle: EmbyIndex=$targetIndex, OrdinalIndex=$targetOrdinalIndex, Label=$targetLabel")
-        }
+        PlayerTrackManager.selectSubtitle(player, subtitleTracks, selectedSubtitleIndex, currentTracks)
     }
 
-    // 更新选中音频 - 使用顺序匹配（Emby音频列表的第一个对应轨道ID 1）
+    // 更新选中音频 - 使用 PlayerTrackManager
     LaunchedEffect(selectedAudioIndex, audioTracks, currentTracks) {
-        if (audioTracks.isEmpty()) return@LaunchedEffect
-        if (selectedAudioIndex <= -1) return@LaunchedEffect
-
-        val targetTrack = audioTracks.find { it.index == selectedAudioIndex }
-            ?: run {
-                Log.w("Player", "Target audio index $selectedAudioIndex not found in metadata")
-                return@LaunchedEffect
-            }
-
-        // 获取在列表中的顺序位置（第一个音频对应轨道ID 1，即顺序0）
-        val targetOrdinalIndex = audioTracks.indexOf(targetTrack)
-        val targetLabel = targetTrack.displayTitle
-        val targetIndex = targetTrack.index?.toString() ?: ""
-
-        Log.d("Player", "Audio Selection: Target [EmbyIndex:$targetIndex, Label:$targetLabel, OrdinalIndex:$targetOrdinalIndex]")
-
-        var parametersBuilder = player.trackSelectionParameters.buildUpon()
-
-        val groups = currentTracks?.groups ?: player.currentTracks.groups
-        val trackGroups = groups.filter { it.type == C.TRACK_TYPE_AUDIO }
-        var isMatched = false
-
-        // 打印可用音频轨道
-        Log.d("Player", "--- Available Audio Tracks ---")
-        var totalTracks = 0
-            trackGroups.forEachIndexed { gi, group ->
-                for (i in 0 until group.length) {
-                    val f = group.getTrackFormat(i)
-                Log.d("Player", "Group[$gi] Track[$i]: ID=${f.id}, Label=${f.label}, Lang=${f.language}")
-                totalTracks++
-            }
-        }
-        Log.d("Player", "Total audio tracks: $totalTracks")
-
-        // 使用顺序匹配：音频列表的第一个对应轨道顺序0
-        if (targetOrdinalIndex >= 0) {
-            var trackCounter = 0
-            outerOrdinal@ for (group in trackGroups) {
-                for (i in 0 until group.length) {
-                    if (trackCounter == targetOrdinalIndex) {
-                        parametersBuilder.setOverrideForType(
-                            TrackSelectionOverride(group.mediaTrackGroup, i)
-                        )
-                        isMatched = true
-                        val f = group.getTrackFormat(i)
-                        Log.d("Player", "Matched audio by Ordinal: OrdinalIndex=$targetOrdinalIndex -> Track (ID:${f.id}, Label:${f.label})")
-                        break@outerOrdinal
-                    }
-                    trackCounter++
-                }
-            }
-        }
-
-        if (isMatched) {
-            player.trackSelectionParameters = parametersBuilder.build()
-        } else {
-            Log.w("Player", "Unable to match audio: OrdinalIndex=$targetOrdinalIndex, Label=$targetLabel")
-        }
+        PlayerTrackManager.selectAudio(player, audioTracks, selectedAudioIndex, currentTracks)
     }
 
 
@@ -719,7 +529,7 @@ fun PlayerScreen(
                         onBack()
                     }
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    ErrorHandler.logError("PlayerScreen", "操作失败", e)
                     onBack()
                 }
             } else {
@@ -728,84 +538,47 @@ fun PlayerScreen(
         }
     }
 
-    // Session Reporting & Updates
+    // Session Reporting & Updates - 使用 PlayerReporting 定期报告进度
     LaunchedEffect(isPlaying) {
         if (isPlaying) {
             var tickCount = 0
             while (isActive) {
                 try {
-
-
-                    // 2. Report Progress (Every 5s approx, tickCount % 5 == 0)
+                    // 每 5 秒报告一次进度
                     if (tickCount % 5 == 0) {
-                        val ticks = position * 10000
-                        val playMethod = Utils.determinePlayMethod(media)
-
-                        val body = mapOf(
-                            "VolumeLevel" to 100,
-                            "IsMuted" to false,
-                            "IsPaused" to false,
-                            "RepeatMode" to "RepeatNone",
-                            "PositionTicks" to ticks,
-                            "PlaybackStartTimeTicks" to 0,
-                            "SubtitleStreamIndex" to selectedSubtitleIndex,
-                            "AudioStreamIndex" to selectedAudioIndex,
-                            "PlayMethod" to playMethod,
-                            "PlaySessionId" to (media.playSessionId ?: ""),
-                            "MediaSourceId" to ((media.mediaSources as? List<*>)?.firstOrNull() as? Map<*, *>)?.get(
-                                "Id"
-                            ),
-                            "ItemId" to mediaId,
-                            "CanSeek" to true,
-                            "EventName" to "TimeUpdate"
+                        PlayerReporting.reportProgress(
+                            repository = repository,
+                            mediaId = mediaId,
+                            media = media,
+                            position = position,
+                            selectedSubtitleIndex = selectedSubtitleIndex,
+                            selectedAudioIndex = selectedAudioIndex
                         )
-
-                        repository.reportPlaybackProgress(body)
                     }
-
                     tickCount++
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    ErrorHandler.logError("PlayerScreen", "报告进度失败", e)
                 }
                 delay(1000)
             }
         }
     }
 
-    // Initial Playing Report - Call when playback starts to register session with Emby server
+    // Initial Playing Report - 使用 PlayerReporting 报告播放开始
     LaunchedEffect(isPlaying, videoUrl) {
         if (isPlaying && videoUrl != null && !hasReportedPlaying) {
             try {
-                val source = media.mediaSources?.firstOrNull()
-                val ticks = position * 10000
-                val playMethod = Utils.determinePlayMethod(media)
-                val body = mapOf(
-                    "VolumeLevel" to 100,
-                    "IsMuted" to false,
-                    "IsPaused" to false,
-                    "RepeatMode" to "RepeatNone",
-                    "Shuffle" to false,
-                    "SubtitleOffset" to 0,
-                    "PlaybackRate" to 1,
-                    "MaxStreamingBitrate" to 60000000,
-                    "PositionTicks" to ticks,
-                    "PlaybackStartTimeTicks" to System.currentTimeMillis() * 10000,
-                    "SubtitleStreamIndex" to selectedSubtitleIndex,
-                    "AudioStreamIndex" to selectedAudioIndex,
-                    "BufferedRanges" to emptyList<Any>(),
-                    "SeekableRanges" to listOf(
-                        mapOf("start" to 0, "end" to (source?.runTimeTicks ?: 0))
-                    ),
-                    "PlayMethod" to playMethod,
-                    "PlaySessionId" to (media.playSessionId ?: ""),
-                    "MediaSourceId" to (source?.id ?: ""),
-                    "CanSeek" to true,
-                    "ItemId" to (source?.itemId ?: mediaId)
+                PlayerReporting.reportPlaying(
+                    repository = repository,
+                    mediaId = mediaId,
+                    media = media,
+                    position = position,
+                    selectedSubtitleIndex = selectedSubtitleIndex,
+                    selectedAudioIndex = selectedAudioIndex
                 )
-                repository.playing(body)
                 hasReportedPlaying = true
             } catch (e: Exception) {
-                Log.e("PlayerSession", "Failed to report playing", e)
+                ErrorHandler.logError("PlayerScreen", "报告播放开始失败", e)
             }
         }
     }
@@ -872,7 +645,7 @@ fun PlayerScreen(
 
 
             } catch (e: Exception) {
-                e.printStackTrace()
+                ErrorHandler.logError("PlayerScreen", "操作失败", e)
 
             }
             // 如果运行到这里，说明本次没找到，repeat 会继续下一次
@@ -899,6 +672,33 @@ fun PlayerScreen(
 
             // 每 800 毫秒更新一次进度
             delay(800)
+        }
+    }
+
+    // 片头检测和自动跳过逻辑
+    LaunchedEffect(isPlaying, position, introStartMs, introEndMs, autoSkipIntro, hasAutoSkipped) {
+        if (introStartMs != null && introEndMs != null && isPlaying) {
+            // 检查是否在片头范围内
+            val inIntroRange = position >= introStartMs!! && position < introEndMs!!
+            
+            if (inIntroRange) {
+                // 如果启用了自动跳过且还未跳过，则自动跳过
+                if (autoSkipIntro && !hasAutoSkipped) {
+                    player.seekTo(introEndMs!!)
+                    hasAutoSkipped = true
+                    showSkipIntroButton = false
+                } else if (!autoSkipIntro) {
+                    // 如果未启用自动跳过，显示跳过按钮
+                    showSkipIntroButton = true
+                }
+            } else {
+                // 不在片头范围内，隐藏跳过按钮
+                if (position >= introEndMs!!) {
+                    showSkipIntroButton = false
+                }
+            }
+        } else {
+            showSkipIntroButton = false
         }
     }
 
@@ -1195,6 +995,21 @@ fun PlayerScreen(
             )
         }
 
+        // 4.5. Skip Intro Button (跳过片头)
+        if (showSkipIntroButton && introEndMs != null && !showResumeButtons) {
+            SkipIntroButton(
+                introEndMs = introEndMs!!,
+                onSkip = {
+                    showSkipIntroButton = false
+                    player.seekTo(introEndMs!!)
+                },
+                onTimeout = {
+                    showSkipIntroButton = false
+                },
+                countdownSeconds = 5
+            )
+        }
+
         // 5. Menu Dialog
         if (showMenu) {
             PlayerMenu(
@@ -1220,6 +1035,11 @@ fun PlayerScreen(
                     val prefs = context.getSharedPreferences("emby_tv_prefs", Context.MODE_PRIVATE)
                     prefs.edit().putInt("play_mode", it).apply()
                 },
+                autoSkipIntro = autoSkipIntro,
+                onAutoSkipIntroChange = {
+                    autoSkipIntro = it
+                    preferencesManager.autoSkipIntro = it
+                },
                 isFavorite = isFavorite,
                 onToggleFavorite = {
                     isFavorite = !isFavorite
@@ -1232,7 +1052,7 @@ fun PlayerScreen(
                                     repository.removeFromFavorites(mediaInfo.id!!)
                                 }
                             } catch (e: Exception) {
-                                e.printStackTrace()
+                                ErrorHandler.logError("PlayerScreen", "操作失败", e)
                             }
                         }
                     }

@@ -127,6 +127,17 @@ object Utils {
         return "$kbps kbps"
     }
 
+    /**
+     * 将 Emby ticks 转换为毫秒
+     * Emby 使用 10000 ticks = 1ms 的转换比例
+     * 
+     * @param ticks Emby ticks 值
+     * @return 毫秒值
+     */
+    fun ticksToMs(ticks: Long): Long {
+        return ticks / 10000
+    }
+
 
     fun getTranscodeReasonText(context: Context, reasons: List<String>): String {
         if (reasons.isEmpty()) return ""

@@ -110,9 +110,20 @@ class EmbyRepository private constructor(private val context: Context) {
     }
 
     /**
-     * 获取媒体库列表
+     * 获取媒体库列表（支持分页）
+     * 
+     * @param parentId 父级ID
+     * @param type 类型
+     * @param startIndex 起始索引
+     * @param limit 每页数量
+     * @return Pair<List<BaseItemDto>, Int> 数据列表和总数
      */
-    suspend fun getLibraryList(parentId: String, type: String): List<BaseItemDto> {
+    suspend fun getLibraryList(
+        parentId: String, 
+        type: String,
+        startIndex: Int = 0,
+        limit: Int = 20
+    ): Pair<List<BaseItemDto>, Int> {
         requireLoggedIn()
         return EmbyApi.getLibraryList(
             context,
@@ -121,7 +132,9 @@ class EmbyRepository private constructor(private val context: Context) {
             session.deviceId,
             session.userId!!,
             parentId,
-            type
+            type,
+            startIndex,
+            limit
         )
     }
 

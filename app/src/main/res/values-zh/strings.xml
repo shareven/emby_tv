@@ -142,4 +142,18 @@
     <!-- Player Resume Dialog -->
     <string name="play_from_start">从头开始</string>
     <string name="continue_playback">继续播放</string>
+
+    <!-- Error Messages -->
+    <string name="error_network_unavailable">网络连接失败，请检查网络设置</string>
+    <string name="error_connection_timeout">连接超时，请重试</string>
+    <string name="error_server_unreachable">无法连接到服务器</string>
+    <string name="error_ssl_failed">安全连接失败</string>
+    <string name="error_network_error">网络错误，请重试</string>
+    <string name="error_unknown">未知错误</string>
+
+    <!-- Intro Skip -->
+    <string name="skip_intro">跳过片头</string>
+    <string name="auto_skip_intro">自动跳过片头</string>
+    <string name="manual_skip_intro">手动跳过片头</string>
+    <string name="intro_detected">检测到片头</string>
 </resources>

@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.xxxx.emby_tv.data.repository.EmbyRepository
 import com.xxxx.emby_tv.data.model.BaseItemDto
+import com.xxxx.emby_tv.util.ErrorHandler
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
@@ -94,7 +95,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     onResult(items.first())
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                ErrorHandler.logError("HomeViewModel", "加载数据失败", e)
             }
         }
     }

@@ -94,10 +94,7 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         // 数据未加载完成时显示 Loading 组件
-        // 使用 libraryLatestItems == null 判断首次加载，避免与应用初始化 Loading 重叠
-        if (libraryLatestItems == null) {
-//            Loading(modifier = Modifier.weight(1f))
-        } else {
+        if (libraryLatestItems != null) {
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(bottom = 40.dp)
@@ -106,7 +103,7 @@ fun HomeScreen(
                 item {
                     MediaSection(
                         title = stringResource(R.string.my_libraries),
-                        items = libraryLatestItems ?: emptyList(),
+                        items = libraryLatestItems,
                         isMyLibrary = true,
                         serverUrl = serverUrl,
                         onItemSelected = { item ->

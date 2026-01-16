@@ -37,6 +37,7 @@ import com.xxxx.emby_tv.data.repository.EmbyRepository
 import com.xxxx.emby_tv.data.model.BaseItemDto
 import com.xxxx.emby_tv.data.model.MediaDto
 import com.xxxx.emby_tv.data.model.MediaStreamDto
+import com.xxxx.emby_tv.util.ErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -59,7 +60,9 @@ fun PlayerMenu(
     onToggleFavorite: () -> Unit,
     serverUrl: String,
     repository: EmbyRepository,
-    onNavigateToPlayer: (BaseItemDto) -> Unit
+    onNavigateToPlayer: (BaseItemDto) -> Unit,
+    autoSkipIntro: Boolean = false,
+    onAutoSkipIntroChange: (Boolean) -> Unit = {}
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
@@ -75,6 +78,7 @@ fun PlayerMenu(
         list.add("Audio") // 3 or 2
         if (isSeries) list.add("Mode")
         list.add("Correction") // ...
+        list.add("IntroSkip") // Intro Skip settings
         list
     }
 
@@ -124,6 +128,7 @@ fun PlayerMenu(
                                 "Audio" -> stringResource(R.string.audio_label)
                                 "Mode" -> stringResource(R.string.play_mode)
                                 "Correction" -> stringResource(R.string.playback_correction)
+                                "IntroSkip" -> stringResource(R.string.skip_intro)
                                 else -> title
                             }
 
@@ -183,6 +188,10 @@ fun PlayerMenu(
                             "Correction" -> PlaybackCorrectionTab(
                                 playbackCorrection,
                                 onPlaybackCorrectionChange
+                            )
+                            "IntroSkip" -> IntroSkipTab(
+                                autoSkipIntro,
+                                onAutoSkipIntroChange
                             )
 
                         }
@@ -365,7 +374,7 @@ fun EpisodesTab(
                 val list = repository.getSeriesList(seriesId)
                 episodes = list
             } catch (e: Exception) {
-                e.printStackTrace()
+                ErrorHandler.logError("PlayerMenu", "操作失败", e)
             } finally {
                 isLoading = false
             }
@@ -643,6 +652,55 @@ fun PlayModeTab(current: Int, onChange: (Int) -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(title, style = TvMaterialTheme.typography.bodyLarge)
+                    if (isSelected) Icon(
+                        Icons.Default.Check,
+                        null,
+                        tint = LocalContentColor.current
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun IntroSkipTab(
+    autoSkipIntro: Boolean,
+    onAutoSkipIntroChange: (Boolean) -> Unit
+) {
+    Column(modifier = Modifier.padding(horizontal = 150.dp)) {
+        val options = listOf(
+            false to stringResource(R.string.manual_skip_intro),
+            true to stringResource(R.string.auto_skip_intro)
+        )
+        options.forEach { (value, label) ->
+            val isSelected = autoSkipIntro == value
+            Surface(
+                onClick = { onAutoSkipIntroChange(value) },
+                shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    focusedContainerColor = TvMaterialTheme.colorScheme.primary,
+                    focusedContentColor = TvMaterialTheme.colorScheme.onPrimary,
+                    containerColor = if (isSelected) TvMaterialTheme.colorScheme.surfaceVariant.copy(
+                        alpha = 0.5f
+                    ) else Color.Transparent,
+                    contentColor = TvMaterialTheme.colorScheme.onSurface
+                ),
+                scale = ClickableSurfaceDefaults.scale(
+                    focusedScale = 1.03f,
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(label, style = TvMaterialTheme.typography.bodyLarge)
                     if (isSelected) Icon(
                         Icons.Default.Check,
                         null,

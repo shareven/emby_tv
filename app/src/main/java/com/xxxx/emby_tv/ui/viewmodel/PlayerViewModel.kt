@@ -10,6 +10,7 @@ import com.xxxx.emby_tv.data.repository.EmbyRepository
 import com.xxxx.emby_tv.data.model.MediaDto
 import com.xxxx.emby_tv.data.model.MediaSourceInfoDto
 import com.xxxx.emby_tv.data.model.MediaStreamDto
+import com.xxxx.emby_tv.util.ErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
@@ -133,7 +134,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 val body = buildPlayingBody(mediaId, positionTicks)
                 repository.playing(body)
             } catch (e: Exception) {
-                e.printStackTrace()
+                ErrorHandler.logError("PlayerViewModel", "操作失败", e)
             }
         }
     }
@@ -151,7 +152,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 val body = buildProgressBody(mediaId, positionTicks, isPaused)
                 repository.reportPlaybackProgress(body)
             } catch (e: Exception) {
-                e.printStackTrace()
+                ErrorHandler.logError("PlayerViewModel", "操作失败", e)
             }
         }
     }
@@ -173,7 +174,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     repository.stopActiveEncodings(sessionId)
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                ErrorHandler.logError("PlayerViewModel", "操作失败", e)
             }
         }
     }

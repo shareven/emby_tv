@@ -142,4 +142,18 @@
     <!-- Player Resume Dialog -->
     <string name="play_from_start">Play from Start</string>
     <string name="continue_playback">Continue</string>
+
+    <!-- Error Messages -->
+    <string name="error_network_unavailable">Network unavailable, please check your connection</string>
+    <string name="error_connection_timeout">Connection timeout, please try again</string>
+    <string name="error_server_unreachable">Unable to connect to server</string>
+    <string name="error_ssl_failed">Secure connection failed</string>
+    <string name="error_network_error">Network error, please try again</string>
+    <string name="error_unknown">Unknown error</string>
+
+    <!-- Intro Skip -->
+    <string name="skip_intro">Skip Intro</string>
+    <string name="auto_skip_intro">Auto Skip Intro</string>
+    <string name="manual_skip_intro">Manual Skip Intro</string>
+    <string name="intro_detected">Intro detected</string>
 </resources>

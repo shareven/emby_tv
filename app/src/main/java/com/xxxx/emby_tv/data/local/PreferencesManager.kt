@@ -27,6 +27,12 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean(KEY_DISABLE_HEVC, false)
         set(value) = prefs.edit().putBoolean(KEY_DISABLE_HEVC, value).apply()
 
+    // === 片头跳过设置 ===
+
+    var autoSkipIntro: Boolean
+        get() = prefs.getBoolean(KEY_AUTO_SKIP_INTRO, false)
+        set(value) = prefs.edit().putBoolean(KEY_AUTO_SKIP_INTRO, value).apply()
+
     // === 通用方法 ===
 
     fun getString(key: String, defaultValue: String? = null): String? {
@@ -73,6 +79,7 @@ class PreferencesManager(context: Context) {
         private const val KEY_THEME_ID = "selected_theme_id"
         private const val KEY_PREFER_DIRECT_PLAY = "prefer_direct_play"
         private const val KEY_DISABLE_HEVC = "disable_hevc"
+        private const val KEY_AUTO_SKIP_INTRO = "auto_skip_intro"
 
         private const val DEFAULT_THEME_ID = "purple"
     }

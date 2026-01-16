@@ -3,6 +3,7 @@ package com.xxxx.emby_tv
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import android.graphics.Color as AndroidColor
+import com.xxxx.emby_tv.util.ErrorHandler
 import fi.iki.elonen.NanoHTTPD
 import java.io.IOException
 
@@ -117,7 +118,7 @@ class LocalServer(port: Int, private val onConfigReceived: (String, String, Stri
                     return newFixedLengthResponse(successHtml)
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                ErrorHandler.logError("LocalServer", "服务器错误", e)
                 return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Error parsing request")
             }
         }

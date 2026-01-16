@@ -5,6 +5,7 @@ import android.graphics.Color
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
+import com.xxxx.emby_tv.util.ErrorHandler
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.util.Hashtable
@@ -36,7 +37,7 @@ object QrCodeUtils {
             bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
             return bitmap
         } catch (e: Exception) {
-            e.printStackTrace()
+            ErrorHandler.logError("QrCodeUtils", "生成二维码失败", e)
         }
         return null
     }

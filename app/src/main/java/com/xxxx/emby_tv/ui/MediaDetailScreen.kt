@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.TextUnitType
 import coil3.compose.SubcomposeAsyncImage
 import com.xxxx.emby_tv.data.repository.EmbyRepository
 import com.xxxx.emby_tv.ui.viewmodel.DetailViewModel
+import com.xxxx.emby_tv.util.ErrorHandler
 import kotlinx.coroutines.delay
 
 @Composable
@@ -97,7 +98,7 @@ fun MediaDetailScreen(
                 resume = x
                 selectedSeasonIndex = 0
             } catch (e: Exception) {
-                e.printStackTrace()
+                ErrorHandler.logError("MediaDetailScreen", "加载数据失败", e)
             } finally {
                 isLoadingSeriesData = false
             }

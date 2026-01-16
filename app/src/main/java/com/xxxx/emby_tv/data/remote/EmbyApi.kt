@@ -18,11 +18,14 @@ import com.xxxx.emby_tv.data.model.BaseItemDto
 import com.xxxx.emby_tv.data.model.EmbyResponseDto
 import com.xxxx.emby_tv.data.model.MediaDto
 import com.xxxx.emby_tv.data.model.SessionDto
+import com.xxxx.emby_tv.util.ErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.net.SocketTimeoutException
+import com.google.net.cronet.okhttptransport.CronetTimeoutException
 
 /**
  * Emby API 接口定义
@@ -99,7 +102,11 @@ object EmbyApi {
     }
 
     /**
-     * 获取媒体库列表
+     * 获取媒体库列表（支持分页）
+     * 
+     * @param startIndex 起始索引
+     * @param limit 每页数量
+     * @return Pair<List<BaseItemDto>, Int> 数据列表和总数
      */
     suspend fun getLibraryList(
         context: Context,
@@ -108,14 +115,35 @@ object EmbyApi {
         deviceId: String,
         userId: String,
         parentId: String,
-        type: String
-    ): List<BaseItemDto> {
+        type: String,
+        startIndex: Int = 0,
+        limit: Int = 20
+    ): Pair<List<BaseItemDto>, Int> {
         val url = "/Users/$userId/Items?IncludeItemTypes=$type" +
                 "&Fields=BasicSyncInfo,PrimaryImageAspectRatio,ProductionYear,Status,EndDate" +
-                "&StartIndex=0&SortBy=SortName&SortOrder=Ascending&ParentId=$parentId" +
-                "&EnableImageTypes=Primary,Backdrop,Thumb&ImageTypeLimit=1&Recursive=true&Limit=2000" +
+                "&StartIndex=$startIndex&SortBy=SortName&SortOrder=Ascending&ParentId=$parentId" +
+                "&EnableImageTypes=Primary,Backdrop,Thumb&ImageTypeLimit=1&Recursive=true&Limit=$limit" +
                 "&X-Emby-Token=$apiKey"
-        return httpAsBaseItemDtoList(context, serverUrl, apiKey, deviceId, url)
+        return httpAsBaseItemDtoListWithTotal(context, serverUrl, apiKey, deviceId, url)
+    }
+    
+    /**
+     * HTTP 请求并解析为 BaseItemDto 列表（带总数）
+     */
+    private suspend fun httpAsBaseItemDtoListWithTotal(
+        context: Context,
+        serverUrl: String,
+        apiKey: String,
+        deviceId: String,
+        url: String
+    ): Pair<List<BaseItemDto>, Int> {
+        return httpStream(context, serverUrl, apiKey, deviceId, url) { reader ->
+            val type = object : com.google.gson.reflect.TypeToken<EmbyResponseDto<BaseItemDto>>() {}.type
+            val response: EmbyResponseDto<BaseItemDto>? = gson.fromJson(reader, type)
+            val items = response?.items ?: emptyList()
+            val totalCount = response?.totalRecordCount ?: items.size
+            Pair(items, totalCount)
+        } ?: Pair(emptyList(), 0)
     }
 
     /**
@@ -297,7 +325,7 @@ object EmbyApi {
                 "/Sessions/Playing/Progress?X-Emby-Token=$apiKey", "POST", body
             )
         } catch (e: Exception) {
-            e.printStackTrace()
+            ErrorHandler.logError("EmbyApi", "API请求失败", e)
         }
     }
 
@@ -317,7 +345,7 @@ object EmbyApi {
                 "/Sessions/Playing?reqformat=json&X-Emby-Token=$apiKey", "POST", body
             )
         } catch (e: Exception) {
-            e.printStackTrace()
+            ErrorHandler.logError("EmbyApi", "API请求失败", e)
         }
     }
 
@@ -337,7 +365,7 @@ object EmbyApi {
                 "/Sessions/Playing/Stopped?reqformat=json&X-Emby-Token=$apiKey", "POST", body
             )
         } catch (e: Exception) {
-            e.printStackTrace()
+            ErrorHandler.logError("EmbyApi", "API请求失败", e)
         }
     }
 
@@ -358,7 +386,7 @@ object EmbyApi {
                 "POST", null
             )
         } catch (e: Exception) {
-            e.printStackTrace()
+            ErrorHandler.logError("EmbyApi", "API请求失败", e)
         }
     }
 
@@ -397,7 +425,7 @@ object EmbyApi {
             )
             true
         } catch (e: Exception) {
-            e.printStackTrace()
+            ErrorHandler.logError("EmbyApi", "API请求失败", e)
             false
         }
     }
@@ -420,7 +448,7 @@ object EmbyApi {
             )
             true
         } catch (e: Exception) {
-            e.printStackTrace()
+            ErrorHandler.logError("EmbyApi", "API请求失败", e)
             false
         }
     }
@@ -500,27 +528,67 @@ object EmbyApi {
             requestBuilder.get()
         }
 
-        HttpClient.getClient(context).newCall(requestBuilder.build()).execute().use { response ->
-            val responseTime = System.currentTimeMillis()
-            val networkDuration = responseTime - startTime
+        try {
+            HttpClient.getClient(context).newCall(requestBuilder.build()).execute().use { response ->
+                val responseTime = System.currentTimeMillis()
+                val networkDuration = responseTime - startTime
 
-            if (!response.isSuccessful) {
-                throw Exception("HTTP Error: ${response.code}")
+                if (!response.isSuccessful) {
+                    throw Exception("HTTP Error: ${response.code}")
+                }
+
+                val bodySource = response.body ?: throw Exception("Empty response body")
+                
+                try {
+                    val result = parser(JsonReader(bodySource.charStream()))
+
+                    val endTime = System.currentTimeMillis()
+                    Log.i(TAG, """
+                        🏁 请求完成: $url
+                        ├─ 网络协议: ${response.protocol}
+                        ├─ RTT: ${networkDuration}ms
+                        ├─ JSON解析: ${endTime - responseTime}ms
+                        └─ 总耗时: ${endTime - startTime}ms
+                    """.trimIndent())
+
+                    result
+                } catch (e: Exception) {
+                    // 捕获 JSON 解析过程中的异常（包括网络超时）
+                    Log.e(TAG, "JSON 解析失败: $url", e)
+                    when {
+                        e is CronetTimeoutException ||
+                        e is SocketTimeoutException ||
+                        e.cause is CronetTimeoutException ||
+                        e.cause is SocketTimeoutException ||
+                        e.message?.contains("timeout", ignoreCase = true) == true ||
+                        e.cause?.javaClass?.simpleName?.contains("Timeout") == true -> {
+                            throw Exception("网络请求超时，请检查网络连接", e)
+                        }
+                        else -> {
+                            throw Exception("数据解析失败: ${e.message}", e)
+                        }
+                    }
+                }
             }
-
-            val bodySource = response.body ?: throw Exception("Empty response body")
-            val result = parser(JsonReader(bodySource.charStream()))
-
-            val endTime = System.currentTimeMillis()
-            Log.i(TAG, """
-                🏁 请求完成: $url
-                ├─ 网络协议: ${response.protocol}
-                ├─ RTT: ${networkDuration}ms
-                ├─ JSON解析: ${endTime - responseTime}ms
-                └─ 总耗时: ${endTime - startTime}ms
-            """.trimIndent())
-
-            result
+        } catch (e: Exception) {
+            // 捕获网络请求异常
+            Log.e(TAG, "网络请求失败: $url", e)
+            when {
+                e is CronetTimeoutException ||
+                e is SocketTimeoutException ||
+                e.cause is CronetTimeoutException ||
+                e.cause is SocketTimeoutException ||
+                e.message?.contains("timeout", ignoreCase = true) == true ||
+                e.cause?.javaClass?.simpleName?.contains("Timeout") == true -> {
+                    throw Exception("网络请求超时，请检查网络连接", e)
+                }
+                e.message?.contains("HTTP Error") == true -> {
+                    throw e // 重新抛出 HTTP 错误
+                }
+                else -> {
+                    throw Exception("网络请求失败: ${e.message}", e)
+                }
+            }
         }
     }
 
@@ -766,7 +834,7 @@ object EmbyApi {
                 add("DeviceProfile", deviceProfile)
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            ErrorHandler.logError("EmbyApi", "API请求失败", e)
             return JsonObject()
         }
     }

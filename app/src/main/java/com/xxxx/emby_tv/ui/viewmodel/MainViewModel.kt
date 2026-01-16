@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.xxxx.emby_tv.data.local.PreferencesManager
 import com.xxxx.emby_tv.data.remote.EmbyApi
 import com.xxxx.emby_tv.data.repository.EmbyRepository
+import com.xxxx.emby_tv.util.ErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -124,7 +125,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 newVersion = tagName
 
             } catch (e: Exception) {
-                e.printStackTrace()
+                ErrorHandler.logError("MainViewModel", "操作失败", e)
             }
         }
     }
