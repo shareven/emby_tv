@@ -103,11 +103,7 @@ fun SearchScreen(
                 themeColor.primaryDark,
                 themeColor.secondaryLight
             ) { query ->
-                // Switch to main thread to update query
-
-                launch(Dispatchers.Main) {
-                    searchViewModel.search(query)
-                }
+                searchViewModel.search(query)
             }
             localServer = server
             if (server != null) {

@@ -135,7 +135,13 @@ class LocalServer private constructor(
                         border: 1px solid rgba(255, 255, 255, 0.2);
                         border-radius: 8px; color: white; font-size: 16px;
                     }
-                    input:focus { border-color: var(--theme-primary); outline: none; }
+                    input::placeholder {
+                        color: rgba(255, 255, 255, 0.5);
+                    }
+                    input:focus {
+                        border-color: var(--theme-primary);
+                        outline: none;
+                    }
                     button {
                         width: 100%; padding: 14px;
                         background: white; color: black;

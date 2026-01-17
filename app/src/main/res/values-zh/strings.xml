@@ -82,7 +82,7 @@
 
     <string name="scan_qr_hint">局域网内扫码录入信息</string>
     <string name="starting_server">正在启动本地服务器...</string>
-    <string name="local_server_url">服务器地址:</string>
+    <string name="local_server_url">服务器地址</string>
     <string name="update_title">应用更新</string>
     <string name="update_completed">更新完成</string>
     <string name="update_install_hint">安装完成，请重启应用</string>
