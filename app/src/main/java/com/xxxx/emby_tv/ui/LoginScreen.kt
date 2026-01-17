@@ -211,7 +211,7 @@ fun LoginScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.weight(1.5f))
 
                 Text(
                     text = stringResource(R.string.footer_notice),

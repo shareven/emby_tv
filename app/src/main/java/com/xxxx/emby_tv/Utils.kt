@@ -127,6 +127,25 @@ object Utils {
         return "$kbps kbps"
     }
 
+    fun formatBandwidth(bps: Long): String {
+        if (bps <= 0) return ""
+
+        // bps (bits/s) → bytes/s
+        val bytesPerSecond = bps / 8.0
+
+        // bytes/s → KB/s
+        val kbs = bytesPerSecond / 1024.0
+
+        // bytes/s → MB/s
+        val mbs = kbs / 1024.0
+
+        return if (mbs >= 1.0) {
+            "%.1f MB/s".format(mbs)
+        } else {
+            "%.0f KB/s".format(kbs)
+        }
+    }
+
     /**
      * 将 Emby ticks 转换为毫秒
      * Emby 使用 10000 ticks = 1ms 的转换比例

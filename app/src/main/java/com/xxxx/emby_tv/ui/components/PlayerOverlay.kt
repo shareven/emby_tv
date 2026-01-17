@@ -82,6 +82,7 @@ fun PlayerOverlay(
     isPlaying: Boolean,
     player: ExoPlayer,
     isBuffering: Boolean,
+    downloadSpeed: Long = 0,
 ) {
     Box(
         modifier = Modifier
@@ -191,7 +192,18 @@ fun PlayerOverlay(
         // Center Play/Loading Icon
         Box(modifier = Modifier.align(Alignment.Center)) {
             if (isBuffering) {
-                CircularProgressIndicator(color = Color.White)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(color = Color.White)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = Utils.formatBandwidth(downloadSpeed),
+                        color = Color.White,
+                        fontSize = 14.sp
+                    )
+                }
             } else if (!isPlaying) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,

@@ -2,6 +2,8 @@ package com.xxxx.emby_tv.ui
 
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.ViewGroup
 import androidx.compose.animation.core.Animatable
@@ -57,6 +59,8 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.upstream.BandwidthMeter
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
 import com.xxxx.emby_tv.R
@@ -190,6 +194,10 @@ fun PlayerScreen(
             .build()
     }
 
+    val bandwidthMeter = remember {
+        DefaultBandwidthMeter.getSingletonInstance(context)
+    }
+
     // ExoPlayer
     val player = remember {
         ExoPlayer.Builder(context, renderersFactory)
@@ -211,6 +219,8 @@ fun PlayerScreen(
     }
 
     var isBuffering by remember { mutableStateOf(true) } // Start true assuming we wait for load
+    var downloadSpeed by remember { mutableStateOf(0L) }
+    var lastSpeedUpdate by remember { mutableStateOf(0L) }
 
     // Long press state
     var leftKeyDownTime by remember { mutableStateOf(0L) }
@@ -728,8 +738,7 @@ fun PlayerScreen(
                 if (state == Player.STATE_BUFFERING) {
                     isBuffering = true
                 } else if (state == Player.STATE_READY) {
-                    isBuffering = false
-                    
+                    isBuffering = false             
                    // 在STATE_READY时获取准确时长
                    val rawDuration = player.duration
                    if (rawDuration > 0) {
@@ -775,9 +784,29 @@ fun PlayerScreen(
                 fallbackToServerTranscode()
             }
         }
+
+        val bandwidthListener = object : BandwidthMeter.EventListener {
+            override fun onBandwidthSample(
+                elapsedMs: Int,
+                bytesTransferred: Long,
+                bitrateEstimate: Long
+            ) {
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - lastSpeedUpdate >= 1000) {
+                    downloadSpeed = bitrateEstimate
+                    lastSpeedUpdate = currentTime
+                }
+            }
+        }
+
+        bandwidthMeter.addEventListener(
+            Handler(Looper.getMainLooper()),
+            bandwidthListener
+        )
         player.addListener(listener)
 
         onDispose {
+            bandwidthMeter.removeEventListener(bandwidthListener)
             // 发送停止报告
             reportStopped()
             player.removeListener(listener)
@@ -919,7 +948,8 @@ fun PlayerScreen(
                 buffered = buffered,
                 isPlaying = isPlaying,
                 player = player,
-                isBuffering = isBuffering
+                isBuffering = isBuffering,
+                downloadSpeed = downloadSpeed
             )
 
         }
@@ -931,7 +961,18 @@ fun PlayerScreen(
                 contentAlignment = Alignment.Center
             ) {
                 if (isBuffering) {
-                    CircularProgressIndicator(color = Color.White)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(color = Color.White)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = Utils.formatBandwidth(downloadSpeed),
+                            color = Color.White,
+                            fontSize = 14.sp
+                        )
+                    }
                 } else {
                     // Play Icon
                     Icon(
