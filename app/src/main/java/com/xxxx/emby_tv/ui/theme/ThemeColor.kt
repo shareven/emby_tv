@@ -24,25 +24,27 @@ object ThemeColorManager {
         ThemeColor(
             id = "rose",
             name = context.getString(com.xxxx.emby_tv.R.string.theme_color_rose),
-            primary = Color(0xFFe91e63),
+            primary = Color(0xFFe91e63), // 玫瑰红
             primaryLight = Color(0xFFf06292),
             primaryDark = Color(0xFFc2185b),
-            secondary = Color(0xFFff4081),
-            secondaryLight = Color(0xFFff79b0),
-            secondaryDark = Color(0xFFc60055)
+            // 模仿 purple 逻辑：配深靛蓝 (Rose -> Indigo) 产生红蓝冷暖对撞
+            secondary = Color(0xFF3f51b5),
+            secondaryLight = Color(0xFF7986cb),
+            secondaryDark = Color(0xFF303f9f)
         ),
         ThemeColor(
             id = "blue",
             name = context.getString(com.xxxx.emby_tv.R.string.theme_color_blue),
-            primary = Color(0xFF2196f3),
+            primary = Color(0xFF2196f3), // 蓝色
             primaryLight = Color(0xFF64b5f6),
             primaryDark = Color(0xFF1976d2),
-            secondary = Color(0xFF03a9f4),
-            secondaryLight = Color(0xFF4fc3f7),
-            secondaryDark = Color(0xFF0288d1)
+            // 模仿 purple 逻辑：配紫色 (Blue -> Purple)
+            secondary = Color(0xFF9c27b0),
+            secondaryLight = Color(0xFFba68c8),
+            secondaryDark = Color(0xFF7b1fa2)
         ),
         ThemeColor(
-            id = "purple",
+            id = "purple", // 参照标准
             name = context.getString(com.xxxx.emby_tv.R.string.theme_color_purple),
             primary = Color(0xFF9c27b0),
             primaryLight = Color(0xFFba68c8),
@@ -54,54 +56,64 @@ object ThemeColorManager {
         ThemeColor(
             id = "teal",
             name = context.getString(com.xxxx.emby_tv.R.string.theme_color_teal),
-            primary = Color(0xFF009688),
+            primary = Color(0xFF009688), // 青色
             primaryLight = Color(0xFF4db6ac),
             primaryDark = Color(0xFF00796b),
-            secondary = Color(0xFF26a69a),
-            secondaryLight = Color(0xFF80cbc4),
-            secondaryDark = Color(0xFF00695c)
+            // 模仿 purple 逻辑：配翠绿色 (Teal -> Green)
+            secondary = Color(0xFF4caf50),
+            secondaryLight = Color(0xFF81c784),
+            secondaryDark = Color(0xFF388e3c)
         ),
-        ThemeColor(
-            id = "orange",
-            name = context.getString(com.xxxx.emby_tv.R.string.theme_color_orange),
-            primary = Color(0xFFff9800),
-            primaryLight = Color(0xFFffb74d),
-            primaryDark = Color(0xFFf57c00),
-            secondary = Color(0xFFff5722),
-            secondaryLight = Color(0xFFff8a65),
-            secondaryDark = Color(0xFFe64a19)
-        ),
+
         ThemeColor(
             id = "indigo",
             name = context.getString(com.xxxx.emby_tv.R.string.theme_color_indigo),
-            primary = Color(0xFF3f51b5),
+            primary = Color(0xFF3f51b5), // 靛蓝
             primaryLight = Color(0xFF7986cb),
             primaryDark = Color(0xFF303f9f),
-            secondary = Color(0xFF5c6bc0),
-            secondaryLight = Color(0xFF9fa8da),
-            secondaryDark = Color(0xFF3949ab)
+            // 模仿 purple 逻辑：配青色 (Indigo -> Teal)
+            secondary = Color(0xFF009688),
+            secondaryLight = Color(0xFF4db6ac),
+            secondaryDark = Color(0xFF00796b)
         ),
         ThemeColor(
             id = "green",
             name = context.getString(com.xxxx.emby_tv.R.string.theme_color_green),
-            primary = Color(0xFF4caf50),
+            primary = Color(0xFF4caf50), // 绿色
             primaryLight = Color(0xFF81c784),
             primaryDark = Color(0xFF388e3c),
-            secondary = Color(0xFF8bc34a),
-            secondaryLight = Color(0xFFaed581),
-            secondaryDark = Color(0xFF689f38)
+            // 模仿 purple 逻辑：配琥珀黄 (Green -> Amber) 像热带水果
+            secondary = Color(0xFFffc107),
+            secondaryLight = Color(0xFFffecb3),
+            secondaryDark = Color(0xFFff8f00)
+        ),
+        ThemeColor(
+            id = "orange",
+            name = context.getString(com.xxxx.emby_tv.R.string.theme_color_orange),
+            primary = Color(0xFFff9800), // 橙色
+            primaryLight = Color(0xFFffb74d),
+            primaryDark = Color(0xFFf57c00),
+            // 【重改】配 亮青/薄荷绿 (Orange -> Bright Teal)
+            // 这种组合像冰淇淋，清新且非常有视觉张力，完全不闷
+            secondary = Color(0xFF00BFA5),
+            secondaryLight = Color(0xFF5DF2D6),
+            secondaryDark = Color(0xFF008E76)
         ),
         ThemeColor(
             id = "amber",
             name = context.getString(com.xxxx.emby_tv.R.string.theme_color_amber),
-            primary = Color(0xFFffc107),
-            primaryLight = Color(0xFFffecb3),
-            primaryDark = Color(0xFFff8f00),
-            secondary = Color(0xFFffab00),
-            secondaryLight = Color(0xFFffd54f),
-            secondaryDark = Color(0xFFff6f00)
-        )
+            primary = Color(0xFFffc107), // 琥珀金
+            primaryLight = Color(0xFFECD182),
+            primaryDark = Color(0xFFCC7607),
+            // 【重改】配 亮紫色 (Amber -> Bright Purple)
+            // 就像紫配红一样，黄配紫是极高饱和度的时尚撞色，非常显眼
+            secondary = Color(0xFFD500F9),
+            secondaryLight = Color(0xFFE040FB),
+            secondaryDark = Color(0xFFAA00FF)
+        ),
+
     )
+
 
     @Composable
     fun getThemeColorById(context: Context, id: String): ThemeColor {

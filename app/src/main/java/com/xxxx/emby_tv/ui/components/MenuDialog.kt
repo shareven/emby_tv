@@ -50,6 +50,7 @@ fun MenuDialog(
     isShowLogout: Boolean = true
 ) {
     val showThemeSelection = remember { mutableStateOf(false) }
+    val isMenuVisible = remember { mutableStateOf(true) }
     val firstItemFocusRequester = remember { FocusRequester() }
 
     // 获取当前应用的主题色，用于焦点高亮
@@ -66,7 +67,10 @@ fun MenuDialog(
         )
     } else {
         Dialog(
-            onDismissRequest = onDismiss,
+            onDismissRequest = {
+                isMenuVisible.value = false
+                onDismiss()
+            },
             properties = DialogProperties(usePlatformDefaultWidth = false) // 撑满全屏以实现渐变背景
         ) {
             // 1. 全屏沉浸式渐变背景
@@ -177,9 +181,18 @@ fun MenuDialog(
     }
 
     LaunchedEffect(showThemeSelection.value) {
-        if (!showThemeSelection.value) {
+        if (!showThemeSelection.value && isMenuVisible.value) {
             kotlinx.coroutines.delay(150)
-            firstItemFocusRequester.requestFocus()
+            try {
+                firstItemFocusRequester.requestFocus()
+            } catch (e: Exception) {
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            isMenuVisible.value = false
         }
     }
 }
@@ -290,8 +303,8 @@ fun ThemeSelectionDialog(
                                         .fillMaxSize()
                                         .background(
                                             Brush.linearGradient(
-                                                0.0f to theme.secondary,
-                                                1.0f to theme.secondary,
+                                                0.0f to theme.primaryDark,
+                                                1.0f to theme.secondaryLight,
                                                 start = Offset.Zero,
                                                 end = Offset.Infinite
                                             )

@@ -18,20 +18,16 @@ fun BuildGradientBackground(
     themeColor: ThemeColor = ThemeColorManager.getThemeColorById(context, "purple"), // 默认使用紫罗兰色
     content: @Composable () -> Unit
 ) {
-    // 使用主题色定义渐变背景
-    val color1 = themeColor.primaryDark
-    val color2 = themeColor.secondaryLight
-
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 brush = Brush.linearGradient(
-                    colors = listOf(color1, color2),
-                    // 对应 Flutter 的 stops: [0.3, 0.7]
+                    0.0f to themeColor.primaryDark,
+                    1.0f to themeColor.secondaryLight,
                     start = Offset.Zero,
-                    end = Offset.Infinite // 自动适配任何屏幕分辨率 (1080p 或 4K)
+                    end = Offset.Infinite
                 )
             )
     ) {
