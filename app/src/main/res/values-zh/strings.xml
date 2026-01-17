@@ -99,7 +99,6 @@
     <string name="loop_list">列表循环</string>
     <string name="loop_single">单集循环</string>
     <string name="loop_off">不循环</string>
-    <string name="scan_to_input">扫码录入</string>
     <string name="input_label">输入</string>
     <string name="confirm">确认</string>
     <string name="cancel">取消</string>

@@ -28,6 +28,7 @@ android {
         targetSdk = 36
         versionName = "2.0.2"
         versionCode = 202
+        // versionCode = 39
 
     }
 

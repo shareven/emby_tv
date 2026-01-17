@@ -166,6 +166,7 @@ object EmbyApi {
     ): Pair<List<BaseItemDto>, Int> {
         val encodedQuery = java.net.URLEncoder.encode(query, "UTF-8")
         val url = "/Users/$userId/Items?SearchTerm=$encodedQuery" +
+                "&IncludeItemTypes=Movie,Series,BoxSet,MusicAlbum,Audio,Video" +
                 "&Fields=BasicSyncInfo,PrimaryImageAspectRatio,ProductionYear,Status,EndDate" +
                 "&StartIndex=$startIndex&SortBy=SortName&SortOrder=Ascending" +
                 "&EnableImageTypes=Primary,Backdrop,Thumb&ImageTypeLimit=1&Recursive=true&Limit=$limit" +

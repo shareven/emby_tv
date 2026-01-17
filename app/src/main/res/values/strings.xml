@@ -99,7 +99,6 @@
     <string name="subtitles">Subtitles</string>
     <string name="audio">Audio</string>
     <string name="playback_correction">Playback Correction</string>
-    <string name="scan_to_input">Scan to input</string>
     <string name="input_label">Input</string>
     <string name="confirm">Confirm</string>
     <string name="cancel">Cancel</string>

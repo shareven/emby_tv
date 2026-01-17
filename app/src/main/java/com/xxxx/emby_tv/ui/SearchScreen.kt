@@ -61,22 +61,21 @@ fun SearchScreen(
     loginViewModel: LoginViewModel,
     mainViewModel: MainViewModel,
     onNavigateBack: () -> Unit,
-    onNavigateToSeries: (String) -> Unit
+    onNavigateToSeries: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val repository = remember { EmbyRepository.getInstance(context) }
-    val serverUrl = repository.serverUrl ?: ""
     val themeColor = ThemeColorManager.getThemeColorById(context, mainViewModel.currentThemeId)
 
     // State
     var showSearchDialog by remember { mutableStateOf(false) }
     val searchResults = searchViewModel.searchResults
     val isLoading = searchViewModel.isLoading
-    val isLoadingMore = searchViewModel.isLoadingMore
-    val hasMoreData = searchViewModel.hasMoreData
+    // val isLoadingMore = searchViewModel.isLoadingMore // Removed in ViewModel
+    // val hasMoreData = searchViewModel.hasMoreData // Removed in ViewModel
     val totalCount = searchViewModel.totalCount
     val currentQuery = searchViewModel.currentQuery
-    
+
     // Server & QR Code State
     var qrCodeBitmap by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var localServerAddress by remember { mutableStateOf("") }
@@ -86,15 +85,26 @@ fun SearchScreen(
     val savedAccounts = loginViewModel.savedAccounts
     val currentAccountId = loginViewModel.currentAccountId
 
+    // Sort accounts: Current account first
+    val sortedAccounts = remember(savedAccounts, currentAccountId) {
+        savedAccounts.sortedByDescending { it.id == currentAccountId }
+    }
+
     // Focus
     val searchInputFocusRequester = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
 
+
     // Start Local Server for Search
     LaunchedEffect(themeColor) {
         withContext(Dispatchers.IO) {
-            val server = LocalServer.startSearchServer(themeColor.primaryDark, themeColor.secondaryLight) { query ->
+
+            val server = LocalServer.startSearchServer(
+                themeColor.primaryDark,
+                themeColor.secondaryLight
+            ) { query ->
                 // Switch to main thread to update query
+
                 launch(Dispatchers.Main) {
                     searchViewModel.search(query)
                 }
@@ -123,25 +133,10 @@ fun SearchScreen(
         searchViewModel.errorMessage?.let { error ->
             android.widget.Toast.makeText(
                 context,
-                context.getString(string.search_failed, error),
+                context.getString(R.string.search_failed, error),
                 android.widget.Toast.LENGTH_SHORT
             ).show()
             searchViewModel.errorMessage = null
-        }
-    }
-
-    // Scroll to load more
-    LaunchedEffect(gridState) {
-        snapshotFlow {
-            val layoutInfo = gridState.layoutInfo
-            val totalItemsCount = layoutInfo.totalItemsCount
-            val lastVisibleItemIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            
-            totalItemsCount > 0 && lastVisibleItemIndex >= totalItemsCount - 5
-        }.collectLatest { shouldLoadMore ->
-            if (shouldLoadMore && hasMoreData && !isLoadingMore) {
-                searchViewModel.loadMore()
-            }
         }
     }
 
@@ -157,63 +152,97 @@ fun SearchScreen(
             .padding(horizontal = 32.dp, vertical = 24.dp)
     ) {
         // Left Sidebar: Account List
-        if (savedAccounts.isNotEmpty()) {
+        if (sortedAccounts.isNotEmpty()) {
             LazyColumn(
                 modifier = Modifier
-                    .width(280.dp)
+                    .width(250.dp)
                     .fillMaxHeight()
-                    .padding(end = 24.dp),
+                    .padding(end = 20.dp),
                 contentPadding = PaddingValues(8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                item {
-                    Text(
-                        text = stringResource(string.switch_account),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(bottom = 12.dp, start = 8.dp)
-                    )
+
+
+                // QR Code (Small)
+                if (qrCodeBitmap != null) {
+                    item {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Image(
+                                bitmap = qrCodeBitmap!!,
+                                contentDescription = stringResource(R.string.scan_qr_hint),
+                                modifier = Modifier
+                                    .size(120.dp)
+                                    .background(Color.White, RoundedCornerShape(12.dp))
+                                    .padding(6.dp)
+                            )
+                            Text(
+                                text = stringResource(string.scan_qr_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.padding(bottom = 10.dp, top = 10.dp),
+
+                                )
+                            Text(
+                                text = "${stringResource(R.string.local_server_url)}: $localServerAddress",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.7f)
+                            )
+                        }
+
+                    }
                 }
-                
-                itemsIndexed(savedAccounts, key = { _, acc -> acc.id }) { _, account ->
-                    val isSelected = account.id == currentAccountId
+
+
+                itemsIndexed(sortedAccounts, key = { _, acc -> acc.id }) { _, account ->
+                    val isCurrent = account.id == currentAccountId
+                    // Use domain logic from original code
                     val domain = try {
-                         val uri = java.net.URI(account.serverUrl)
-                         uri.host ?: account.serverUrl
+                        val uri = java.net.URI(account.serverUrl)
+                        uri.host ?: account.serverUrl
                     } catch (e: Exception) {
                         account.serverUrl
                     }
                     val displayText = "${account.username}@$domain"
 
                     Surface(
-                        onClick = { 
-                             if (!isSelected) {
-                                 loginViewModel.switchAccount(
-                                     account.id,
-                                     onSuccess = {
-                                         if (currentQuery.isNotEmpty()) {
-                                             searchViewModel.refreshSearch()
-                                         }
-                                     },
-                                     onError = {
-                                         android.widget.Toast.makeText(context, "Switch failed", android.widget.Toast.LENGTH_SHORT).show()
-                                     }
-                                 )
-                             }
+                        onClick = {
+                            searchViewModel.setAccountFilter(account)
                         },
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
                         colors = ClickableSurfaceDefaults.colors(
-                            containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f),
-                            focusedContainerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.1f),
+                            containerColor = if (isCurrent) MaterialTheme.colorScheme.primary.copy(
+                                alpha = 0.2f
+                            ) else Color.White.copy(alpha = 0.05f),
+                            focusedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
                             contentColor = Color.White,
                             focusedContentColor = Color.White
                         ),
                         border = ClickableSurfaceDefaults.border(
-                            border = if (isSelected) Border(BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))) else Border(BorderStroke(0.dp, Color.Transparent)),
-                            focusedBorder = Border(BorderStroke(2.dp, MaterialTheme.colorScheme.primary))
+                            border = if (isCurrent) Border(
+                                BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                )
+                            ) else Border(BorderStroke(0.dp, Color.Transparent)),
+                            focusedBorder = Border(
+                                BorderStroke(
+                                    2.dp,
+                                    MaterialTheme.colorScheme.primary
+                                )
+                            )
                         ),
                         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
-                        modifier = Modifier.fillMaxWidth().height(60.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp)
+                            .onFocusChanged { focusState ->
+                                if (focusState.isFocused) {
+                                    searchViewModel.setAccountFilter(account)
+                                }
+                            }
                     ) {
                         Row(
                             modifier = Modifier
@@ -224,7 +253,9 @@ fun SearchScreen(
                             Icon(
                                 imageVector = Icons.Default.Person,
                                 contentDescription = null,
-                                tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f),
+                                tint = if (isCurrent) MaterialTheme.colorScheme.primary else Color.White.copy(
+                                    alpha = 0.6f
+                                ),
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
@@ -233,14 +264,14 @@ fun SearchScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.8f)
+                                color = if (isCurrent) Color.White else Color.White.copy(alpha = 0.8f)
                             )
 
                         }
                     }
                 }
             }
-            
+
             // Divider
             Box(
                 modifier = Modifier
@@ -248,7 +279,7 @@ fun SearchScreen(
                     .fillMaxHeight()
                     .background(Color.White.copy(alpha = 0.1f))
             )
-            
+
             Spacer(modifier = Modifier.width(24.dp))
         }
 
@@ -272,12 +303,23 @@ fun SearchScreen(
                     modifier = Modifier
                         .weight(1f)
                         .height(56.dp)
-                        .focusRequester(searchInputFocusRequester),
+                        .focusRequester(searchInputFocusRequester)
+                        .onFocusChanged {
+                            if (it.isFocused) {
+                                // Reset filter when going back to search box
+                                searchViewModel.setAccountFilter(null)
+                            }
+                        },
                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(28.dp)),
                     scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
                     border = ClickableSurfaceDefaults.border(
                         border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))),
-                        focusedBorder = Border(BorderStroke(2.dp, MaterialTheme.colorScheme.primary))
+                        focusedBorder = Border(
+                            BorderStroke(
+                                2.dp,
+                                MaterialTheme.colorScheme.primary
+                            )
+                        )
                     ),
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color.White.copy(alpha = 0.1f),
@@ -300,9 +342,12 @@ fun SearchScreen(
                         Spacer(modifier = Modifier.width(16.dp))
                         Text(
                             text = if (currentQuery.isNotEmpty()) currentQuery else stringResource(
-                                string.search_placeholder),
+                                string.search_placeholder
+                            ),
                             style = MaterialTheme.typography.bodyLarge.copy(
-                                color = if (currentQuery.isNotEmpty()) Color.White else Color.White.copy(alpha = 0.5f)
+                                color = if (currentQuery.isNotEmpty()) Color.White else Color.White.copy(
+                                    alpha = 0.5f
+                                )
                             ),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -311,45 +356,13 @@ fun SearchScreen(
                 }
 
                 Spacer(modifier = Modifier.width(24.dp))
-
-                // QR Code (Small)
-                if (qrCodeBitmap != null) {
-                    Surface(
-                        onClick = { /* No-op */ },
-                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color.White,
-                            focusedContainerColor = Color.White,
-                            contentColor = Color.Black
-                        ),
-                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
-                        modifier = Modifier.size(56.dp)
-                    ) {
-                        Box(modifier = Modifier.fillMaxSize().padding(4.dp), contentAlignment = Alignment.Center) {
-                            Row( horizontalArrangement = Arrangement.Center){
-
-                                 Image(
-                                    bitmap = qrCodeBitmap!!,
-                                    contentDescription = "Scan to search",
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                                Text(
-                                    text = stringResource(string.scan_qr_hint),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color =Color.White
-                                )
-                            }
-                        }
-                    }
-                }
             }
-            
+
             // Search Results Info
-            if (searchResults != null && totalCount > 0) {
+            if (searchResults != null) {
+                val filterText = if (searchViewModel.filterAccount != null) " (Filtered)" else ""
                 Text(
-                    text = "${searchResults.size} / $totalCount",
+                    text = "${searchResults.size} / $totalCount$filterText",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.5f),
                     modifier = Modifier.padding(bottom = 16.dp)
@@ -372,43 +385,74 @@ fun SearchScreen(
                     }
                 } else {
                     val items = searchResults
-                     val maxLength = 200.dp
-                     val maxAspectRatio = items.mapNotNull {
-                        val ratio = it.primaryImageAspectRatio?.toFloat()
+                    val maxLength = 200.dp
+                    // Calculate max aspect ratio based on items present
+                    val maxAspectRatio = items.mapNotNull {
+                        val ratio = it.item.primaryImageAspectRatio?.toFloat()
                         if (ratio == null || ratio == 1.0f) null else ratio
                     }.maxOrNull() ?: 0.666f
 
-                    val imgWidth = if (maxAspectRatio >= 1f) maxLength else (maxLength.value * maxAspectRatio).dp
+                    val imgWidth =
+                        if (maxAspectRatio >= 1f) maxLength else (maxLength.value * maxAspectRatio).dp
                     val numStart = if (maxAspectRatio > 1) 4 else 5
 
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(numStart),
                         state = gridState,
-                        contentPadding = PaddingValues(top=10.dp,bottom = 32.dp),
+                        contentPadding = PaddingValues(top = 10.dp, bottom = 32.dp),
                         verticalArrangement = Arrangement.spacedBy(20.dp),
                         horizontalArrangement = Arrangement.spacedBy(20.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        items(items.size, key = { items[it].id ?: it.hashCode() }) { index ->
+                        items(items.size, key = { index ->
                             val item = items[index]
+                            // Combine item ID + Account ID for uniqueness in grid
+                            "${item.item.id}_${item.account.id}"
+                        }) { index ->
+                            val resultModel = items[index]
+                            val item = resultModel.item
+                            val account = resultModel.account
                             val id = item.id ?: ""
+
                             if (id.isNotEmpty()) {
-                                 BuildItem(
+                                // Construct display name
+                                val domain = try {
+                                    val uri = java.net.URI(account.serverUrl)
+                                    uri.host ?: account.serverUrl
+                                } catch (e: Exception) {
+                                    account.serverUrl
+                                }
+                                val accountName = "${account.username}@$domain"
+
+                                BuildItem(
                                     item = item,
                                     imgWidth = imgWidth,
                                     aspectRatio = maxAspectRatio,
                                     modifier = Modifier.fillMaxWidth(),
                                     isMyLibrary = false,
-                                    serverUrl = serverUrl,
-                                    onItemClick = { onNavigateToSeries(id) }
+                                    serverUrl = account.serverUrl,
+                                    accountName = accountName,
+                                    onItemClick = {
+                                        // Switch account if needed, then navigate
+                                        if (account.id != currentAccountId) {
+                                            loginViewModel.switchAccount(
+                                                accountId = account.id,
+                                                onSuccess = {
+                                                    onNavigateToSeries(id)
+                                                },
+                                                onError = {
+                                                    android.widget.Toast.makeText(
+                                                        context,
+                                                        "Switch account failed",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            )
+                                        } else {
+                                            onNavigateToSeries(id)
+                                        }
+                                    }
                                 )
-                            }
-                        }
-                        if (isLoadingMore) {
-                            item {
-                                Box(modifier = Modifier.size(50.dp), contentAlignment = Alignment.Center) {
-                                    androidx.compose.material3.CircularProgressIndicator(color = Color.White)
-                                }
                             }
                         }
                     }

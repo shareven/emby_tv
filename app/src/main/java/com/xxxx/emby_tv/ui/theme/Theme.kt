@@ -63,6 +63,10 @@ fun Emby_tvTheme(
         surfaceVariant = Color.Black.copy(alpha = 0.4f),
         onSurfaceVariant = Color(0xFFD1D1D1),
 
+        // 2. 【当前值/选中态】增加这两个变量：在彩色背景上形成反差
+        tertiary = Color.LightGray,
+        onTertiary = Color(0xFF1C1B1F),
+
         // 全局背景设为透明，以显示底层的 themeColor 渐变
         background = Color.Transparent,
         onBackground = Color.White,

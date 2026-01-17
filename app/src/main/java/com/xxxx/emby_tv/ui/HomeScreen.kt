@@ -33,11 +33,11 @@ fun HomeScreen(
     homeViewModel: HomeViewModel,
     mainViewModel: MainViewModel,
     navController: NavController,
-    onSwitchAccount: () -> Unit = {}
+    onSwitchAccount: () -> Unit = {},
 ) {
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
-    
+
     // 获取 serverUrl
     val repository = remember { EmbyRepository.getInstance(context) }
     val serverUrl = repository.serverUrl ?: ""
@@ -87,6 +87,21 @@ fun HomeScreen(
         navController.navigate("player/$id?position=$position")
     }
 
+    // Calculate User Info
+    val currentAccountId = repository.currentAccountId
+    val currentAccount = repository.savedAccounts.find { it.id == currentAccountId }
+    val userInfo = if (currentAccount != null) {
+        val domain = try {
+            val uri = java.net.URI(currentAccount.serverUrl)
+            uri.host ?: currentAccount.serverUrl
+        } catch (e: Exception) {
+            currentAccount.serverUrl
+        }
+        "${currentAccount.username}@$domain"
+    } else {
+        null
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         // 顶部状态栏
         TopStatusBar(
@@ -94,8 +109,12 @@ fun HomeScreen(
             newVersion = mainViewModel.newVersion,
             needUpdate = mainViewModel.needUpdate,
             showSearchButton = true,
+            userInfo = userInfo,
             onSearchClick = {
                 navController.navigate("search")
+            },
+            onUserInfoClick = {
+                navController.navigate("account")
             }
         )
 
@@ -234,13 +253,17 @@ private fun MediaSection(
                     key = { _, item -> item.id ?: item.hashCode() }
                 ) { index, item ->
                     val focusRequester = remember { FocusRequester() }
-                    val modifier = if (isContinueWatching && index == 0) {
+                    val modifier = if ((isContinueWatching || isMyLibrary) && index == 0) {
                         Modifier.focusRequester(focusRequester)
                     } else {
                         Modifier
                     }
 
                     if (isContinueWatching && index == 0) {
+                        LaunchedEffect(Unit) {
+                            focusRequester.requestFocus()
+                        }
+                    } else if (isMyLibrary && index == 0) {
                         LaunchedEffect(Unit) {
                             focusRequester.requestFocus()
                         }

@@ -47,7 +47,7 @@ import com.xxxx.emby_tv.ui.viewmodel.MainViewModel
 fun LoginScreen(
     loginViewModel: LoginViewModel,
     mainViewModel: MainViewModel,
-    navController: NavController
+    navController: NavController,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -69,8 +69,8 @@ fun LoginScreen(
     }
 
     // 在初始化时就解析 savedServerUrl
-    val initialParsed = remember { parseServerUrl(loginViewModel.savedServerUrl?:"") }
-    
+    val initialParsed = remember { parseServerUrl(loginViewModel.savedServerUrl ?: "") }
+
     // 从 ViewModel 获取保存的值
     var serverUrl by remember { mutableStateOf(loginViewModel.savedServerUrl) }
     var protocol by remember { mutableStateOf(initialParsed.first) }
@@ -129,7 +129,10 @@ fun LoginScreen(
 
     LaunchedEffect(themeColor) {
         withContext(Dispatchers.IO) {
-            val server = LocalServer.startServer(themeColor.primaryDark, themeColor.secondaryLight) { p, h, pt, user, pass ->
+            val server = LocalServer.startServer(
+                themeColor.primaryDark,
+                themeColor.secondaryLight
+            ) { p, h, pt, user, pass ->
                 protocol = p
                 host = h
                 port = pt
@@ -180,10 +183,9 @@ fun LoginScreen(
                 if (qrCodeBitmap != null) {
                     Image(
                         bitmap = qrCodeBitmap!!,
-                        contentDescription = stringResource(R.string.scan_to_input),
+                        contentDescription = stringResource(R.string.scan_qr_hint),
                         modifier = Modifier
                             .size(200.dp)
-                            .padding(8.dp)
                             .background(Color.White, RoundedCornerShape(12.dp))
                             .padding(12.dp)
                     )
@@ -244,7 +246,9 @@ fun LoginScreen(
                         label = stringResource(R.string.host),
                         onClick = { showHostDialog = true },
                         showMenu = { showMenu = true },
-                        modifier = Modifier.weight(1f).focusRequester(hostFocusRequester)
+                        modifier = Modifier
+                            .weight(1f)
+                            .focusRequester(hostFocusRequester)
                     )
                     TvInputButton(
                         value = port,
@@ -312,10 +316,12 @@ fun LoginScreen(
                                         showMenu = true
                                         true
                                     }
+
                                     Key.Bookmark -> {
                                         showMenu = true
                                         true
                                     }
+
                                     else -> false
                                 }
                             } else false
@@ -440,7 +446,7 @@ fun TvInputButton(
     showMenu: () -> Unit,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     @SuppressLint("ModifierParameter") modifier: Modifier = Modifier,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Surface(
         onClick = onClick,
@@ -470,6 +476,7 @@ fun TvInputButton(
                             showMenu()
                             true
                         }
+
                         else -> false
                     }
                 } else false
@@ -502,7 +509,7 @@ fun TvInputButton(
 fun ProtocolButton(
     protocol: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Surface(
         onClick = onClick,

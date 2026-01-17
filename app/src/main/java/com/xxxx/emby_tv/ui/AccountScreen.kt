@@ -252,21 +252,20 @@ private fun AccountListItem(
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
             border = ClickableSurfaceDefaults.border(
                 border = if (isCurrentAccount) {
-                    Border(BorderStroke(2.dp, Color(0xFF4CAF50)))
+                    Border(BorderStroke(2.dp,  MaterialTheme.colorScheme.tertiary))
                 } else {
                     Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)))
                 },
                 focusedBorder = Border(BorderStroke(2.dp, Color.White))
             ),
             colors = ClickableSurfaceDefaults.colors(
-                containerColor = if (isCurrentAccount) {
-                    Color(0xFF4CAF50).copy(alpha = 0.12f)
-                } else {
-                    Color.White.copy(alpha = 0.05f)
-                },
-                focusedContainerColor = Color.White.copy(alpha = 0.15f),
-                contentColor = Color.White,
-                focusedContentColor = Color.White
+                containerColor = if (isCurrentAccount)  MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.2f)
+                else  Color.White.copy(alpha = 0.05f)
+                ,
+                focusedContainerColor = MaterialTheme.colorScheme.primary,
+                contentColor = if (isCurrentAccount)  MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.tertiary,
+                focusedContentColor = MaterialTheme.colorScheme.onPrimary
             )
         ) {
             Row(
@@ -280,8 +279,7 @@ private fun AccountListItem(
                     modifier = Modifier
                         .size(44.dp)
                         .background(
-                            if (isCurrentAccount) Color(0xFF4CAF50).copy(alpha = 0.2f)
-                            else Color.White.copy(alpha = 0.1f),
+                             Color.White.copy(alpha = 0.1f),
                             CircleShape
                         ),
                     contentAlignment = Alignment.Center
@@ -290,7 +288,6 @@ private fun AccountListItem(
                         imageVector = Icons.Filled.Person,
                         contentDescription = null,
                         modifier = Modifier.size(26.dp),
-                        tint = if (isCurrentAccount) Color(0xFF4CAF50) else Color.White.copy(alpha = 0.7f)
                     )
                 }
 
@@ -304,16 +301,13 @@ private fun AccountListItem(
                         text = account.displayName.ifEmpty { account.username },
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.SemiBold,
-                            color = Color.White
                         ),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = account.serverUrl,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = Color.White.copy(alpha = 0.55f)
-                        ),
+                        style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -325,7 +319,6 @@ private fun AccountListItem(
                         imageVector = Icons.Filled.Check,
                         contentDescription = null,
                         modifier = Modifier.size(22.dp),
-                        tint = Color(0xFF4CAF50)
                     )
                 }
             }

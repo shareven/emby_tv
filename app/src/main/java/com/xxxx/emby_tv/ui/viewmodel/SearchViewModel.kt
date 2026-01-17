@@ -1,69 +1,82 @@
 package com.xxxx.emby_tv.ui.viewmodel
 
 import android.app.Application
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.xxxx.emby_tv.data.repository.EmbyRepository
 import com.xxxx.emby_tv.data.model.BaseItemDto
+import com.xxxx.emby_tv.data.remote.EmbyApi
+import com.xxxx.emby_tv.data.repository.EmbyRepository
+import com.xxxx.emby_tv.data.session.AccountInfo
 import com.xxxx.emby_tv.util.ErrorHandler
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
+ * 搜索结果包装类，包含所属账号信息
+ */
+data class SearchResultModel(
+    val item: BaseItemDto,
+    val account: AccountInfo
+)
+
+/**
  * 搜索 ViewModel
- * 
+ *
  * 职责：
- * - 管理搜索关键词和结果
- * - 支持分页加载
- * - 支持账号切换后重新搜索
+ * - 管理搜索关键词
+ * - 并发搜索所有已登录账号 (Max 4 requests)
+ * - 聚合搜索结果
+ * - 支持按账号过滤
  */
 class SearchViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = EmbyRepository.getInstance(application)
+    private val context = application
 
     companion object {
         private const val TAG = "SearchViewModel"
-        const val PAGE_SIZE = 36
+        const val PAGE_SIZE = 20
+        private const val MAX_CONCURRENT_REQUESTS = 4
     }
 
     // === 搜索关键词 ===
     var currentQuery by mutableStateOf("")
         private set
 
-    // === 搜索结果 ===
-    var searchResults by mutableStateOf<List<BaseItemDto>?>(null)
-        private set
+    // === 搜索结果 (聚合后) ===
+    private var _allSearchResults by mutableStateOf<List<SearchResultModel>?>(null)
 
-    // === 分页状态 ===
-    var totalCount by mutableIntStateOf(0)
-        private set
-    var currentPage by mutableIntStateOf(0)
-        private set
-    var hasMoreData by mutableStateOf(false)
-        private set
-    var isLoadingMore by mutableStateOf(false)
-        private set
+    // === 过滤条件 (当前选中的账号) ===
+    var filterAccount by mutableStateOf<AccountInfo?>(null)
 
-    // === 加载状态 ===
+    // === UI 展示用的结果 (经过过滤) ===
+    val searchResults: List<SearchResultModel>?
+        get() {
+            val all = _allSearchResults ?: return null
+            return if (filterAccount != null) {
+                all.filter { it.account.id == filterAccount?.id }
+            } else {
+                all
+            }
+        }
+    
+    // === 状态 ===
     var isLoading by mutableStateOf(false)
         private set
     var errorMessage by mutableStateOf<String?>(null)
 
-    // === 当前账号ID（用于检测账号切换）===
-    var currentAccountId by mutableStateOf<String?>(null)
+    // === 本次搜索涉及的总条数 (统计用) ===
+    var totalCount by mutableStateOf(0)
         private set
 
-    init {
-        // 初始化时获取当前账号ID
-        currentAccountId = repository.currentAccountId
-    }
-
     /**
-     * 执行搜索
+     * 执行多账号并发搜索
      */
     fun search(query: String) {
         if (query.isBlank()) {
@@ -71,34 +84,63 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
 
-        // 如果搜索词没变且已有数据，不重复搜索
-        if (query == currentQuery && searchResults != null) {
+        // 如果搜索词没变且已有数据，不重复搜索 (除非强制刷新，这里简单处理)
+        if (query == currentQuery && _allSearchResults != null) {
             return
         }
 
         currentQuery = query
-        currentPage = 0
-        hasMoreData = true
-        currentAccountId = repository.currentAccountId
+        filterAccount = null // 重置过滤
 
         viewModelScope.launch {
             isLoading = true
-            searchResults = null // 显示 loading
+            _allSearchResults = null
+            errorMessage = null
+            totalCount = 0
 
             try {
-                val (items, total) = withContext(Dispatchers.IO) {
-                    repository.searchItems(query, 0, PAGE_SIZE)
+                val accounts = repository.savedAccounts
+                if (accounts.isEmpty()) {
+                    // 没有账号，可能是异常状态
+                    isLoading = false
+                    return@launch
                 }
-                searchResults = items
-                totalCount = total
-                currentPage = 1
-                hasMoreData = items.size < total
+
+                // 按当前账号排序：当前账号排第一，其他不变 (或者按名称排，这里只保证当前优先)
+                val currentId = repository.currentAccountId
+                val sortedAccounts = accounts.sortedByDescending { it.id == currentId }
+
+                // 分批并发请求，每次最多 MAX_CONCURRENT_REQUESTS 个
+                val allResults = mutableListOf<SearchResultModel>()
+                var total = 0
+
+                // 使用 chunked 分批处理
+                val chunks = sortedAccounts.chunked(MAX_CONCURRENT_REQUESTS)
                 
-                ErrorHandler.logDebug(TAG, "搜索完成: ${items.size}/$total 条结果")
+                withContext(Dispatchers.IO) {
+                    chunks.forEach { batchAccounts ->
+                        val deferreds = batchAccounts.map { account ->
+                            async {
+                                searchAccount(account, query)
+                            }
+                        }
+                        // 等待这一批完成
+                        val batchResults = deferreds.awaitAll()
+                        batchResults.forEach { (items, count) ->
+                            allResults.addAll(items)
+                            total += count
+                        }
+                    }
+                }
+
+                _allSearchResults = allResults
+                totalCount = total
+                
+                ErrorHandler.logDebug(TAG, "多账号搜索完成: ${allResults.size} 条结果, 总计 $total")
+
             } catch (e: Exception) {
                 ErrorHandler.logError(TAG, "搜索失败", e)
-                searchResults = emptyList()
-                hasMoreData = false
+                _allSearchResults = emptyList()
                 errorMessage = e.message ?: "搜索失败"
             } finally {
                 isLoading = false
@@ -107,70 +149,61 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * 加载更多结果
+     * 单个账号搜索
      */
-    fun loadMore() {
-        // 防止重复加载
-        if (isLoadingMore || !hasMoreData || isLoading || currentQuery.isBlank()) {
-            return
-        }
-
-        viewModelScope.launch {
-            isLoadingMore = true
-
-            try {
-                val startIndex = currentPage * PAGE_SIZE
-                val (newItems, total) = withContext(Dispatchers.IO) {
-                    repository.searchItems(currentQuery, startIndex, PAGE_SIZE)
-                }
-                
-                if (newItems.isNotEmpty()) {
-                    searchResults = (searchResults ?: emptyList()) + newItems
-                    totalCount = total
-                    currentPage++
-                    hasMoreData = (searchResults?.size ?: 0) < total
-                    
-                    ErrorHandler.logDebug(TAG, "加载更多完成: ${searchResults?.size}/$total 条结果")
-                } else {
-                    hasMoreData = false
-                }
-            } catch (e: Exception) {
-                ErrorHandler.logError(TAG, "加载更多失败", e)
-                // 加载更多失败不显示错误，保留已有数据
-            } finally {
-                isLoadingMore = false
+    private suspend fun searchAccount(account: AccountInfo, query: String): Pair<List<SearchResultModel>, Int> {
+        return try {
+            // 直接调用 EmbyApi，不通过 Repository 的 session 状态
+            // 因为我们需要使用非当前登录账号的凭证
+            val (items, total) = EmbyApi.searchItems(
+                context = context,
+                serverUrl = account.serverUrl,
+                apiKey = account.apiKey,
+                deviceId = account.deviceId, // 使用账号绑定的 deviceId (或者 repository.deviceId)
+                userId = account.userId,
+                query = query,
+                startIndex = 0,
+                limit = PAGE_SIZE // 搜索每个服务器前20条
+            )
+            
+            val models = items.map { item ->
+                SearchResultModel(item, account)
             }
+            Pair(models, total)
+        } catch (e: Exception) {
+            ErrorHandler.logError(TAG, "账号 [${account.username}] 搜索失败: ${e.message}")
+            // 单个账号失败不影响整体，返回空
+            Pair(emptyList(), 0)
         }
     }
 
     /**
-     * 使用当前搜索词重新搜索（用于账号切换后）
+     * 刷新搜索（例如账号列表变化后，或者用户手动刷新）
+     * 这里的逻辑改为简单的重新搜索
      */
     fun refreshSearch() {
-        if (currentQuery.isBlank()) {
-            return
-        }
-
-        // 检查账号是否切换
-        val newAccountId = repository.currentAccountId
-        if (newAccountId != currentAccountId) {
-            currentAccountId = newAccountId
-            // 重置状态，重新搜索
+        if (currentQuery.isNotBlank()) {
             val query = currentQuery
-            currentQuery = ""
+            currentQuery = "" // 强制触发
             search(query)
         }
     }
 
     /**
-     * 清空搜索结果
+     * 设置账号过滤
+     */
+    fun setAccountFilter(account: AccountInfo?) {
+        filterAccount = account
+    }
+
+    /**
+     * 清空
      */
     fun clearResults() {
         currentQuery = ""
-        searchResults = null
-        currentPage = 0
+        _allSearchResults = null
+        filterAccount = null
         totalCount = 0
-        hasMoreData = false
         errorMessage = null
     }
 }

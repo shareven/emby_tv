@@ -56,6 +56,7 @@ fun BuildItem(
     isShowImg17: Boolean = false,
     isShowOverview: Boolean = false,
     serverUrl: String, // 直接接受 serverUrl 而不是 AppModel
+    accountName: String? = null, // 显示账号名称 (Username@Domain)
     onItemClick: () -> Unit,
     onMenuClick: (() -> Unit)? = null,
 ) {
@@ -144,6 +145,25 @@ fun BuildItem(
                         }
                     }
                 )
+
+                // 账号名称显示
+                if (!accountName.isNullOrEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(4.dp)
+                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = accountName,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
 
                 // 播放标记
                 if (isSeries || isPlayed) {
