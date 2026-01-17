@@ -8,7 +8,6 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import com.xxxx.emby_tv.data.model.BaseItemDto
 import com.xxxx.emby_tv.data.model.PersonInfo
 import androidx.compose.ui.res.stringResource
@@ -62,24 +61,10 @@ fun MediaDetailScreen(
     var seasons by remember { mutableStateOf<List<BaseItemDto>?>(null) }
     var episodes by remember { mutableStateOf<List<BaseItemDto>?>(null) }
     var resume by remember { mutableStateOf<BaseItemDto?>(null) }
-    var selectedSeasonIndex by remember { mutableIntStateOf(0) }
     var isLoadingSeriesData by remember { mutableStateOf(false) }
 
     LaunchedEffect(seriesId) {
         detailViewModel.loadMediaInfo(seriesId)
-    }
-
-    // Auto scroll to current item
-    val listState = rememberLazyListState()
-    val currentItemId = resume?.id
-
-    LaunchedEffect(episodes) {
-        if (currentItemId != null && episodes != null) {
-            val index = episodes?.indexOfFirst { it.id == currentItemId } ?: -1
-            if (index >= 0) {
-                listState.scrollToItem(index)
-            }
-        }
     }
 
     LaunchedEffect(mediaInfo) {
@@ -96,7 +81,6 @@ fun MediaDetailScreen(
                 seasons = seasonsList
                 episodes = episodesList
                 resume = x
-                selectedSeasonIndex = 0
             } catch (e: Exception) {
                 ErrorHandler.logError("MediaDetailScreen", "加载数据失败", e)
             } finally {
@@ -115,10 +99,6 @@ fun MediaDetailScreen(
                 // Ignore if not attached
             }
         }
-    }
-
-    fun getSeasonEpisodes(seasonName: String): List<BaseItemDto> {
-        return episodes?.filter { it.seasonName == seasonName } ?: emptyList()
     }
 
     if (mediaInfo == null) {
@@ -250,13 +230,8 @@ fun MediaDetailScreen(
                                     val currentResume = resume
                                     if (currentResume != null) {
                                         onNavigateToPlayer(currentResume)
-                                    } else if (!seasons.isNullOrEmpty()) {
-                                        val firstSeason = seasons?.first()
-                                        val seasonName = firstSeason?.name ?: ""
-                                        val eps = getSeasonEpisodes(seasonName)
-                                        if (eps.isNotEmpty()) {
-                                            onNavigateToPlayer(eps.first())
-                                        }
+                                    } else if (!seasons.isNullOrEmpty() && !episodes.isNullOrEmpty()) {
+                                        onNavigateToPlayer(episodes!!.first())
                                     }
                                 } else {
                                     onNavigateToPlayer(mediaInfo)
@@ -338,84 +313,55 @@ fun MediaDetailScreen(
 
                 // Seasons & Episodes Section
                 if (mediaInfo.isSeries && !seasons.isNullOrEmpty()) {
+                    val noEpisodesText = stringResource(R.string.no_episodes_found)
+                    Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                        seasons?.forEach { season ->
+                            val seasonName = season.name ?: ""
+                            val seasonEpisodes = episodes?.filter { it.seasonName == seasonName } ?: emptyList()
 
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(horizontal = 32.dp),
-                        modifier = Modifier.padding(bottom = 20.dp)
-                    ) {
-                        itemsIndexed(seasons ?: emptyList()) { index, season ->
-                            val name = season.name
-                                ?: "${stringResource(R.string.season)} ${index + 1}"
-                            val isSelected = index == selectedSeasonIndex
-
-                            Surface(
-                                onClick = { selectedSeasonIndex = index },
-                                shape = ClickableSurfaceDefaults.shape(
-                                    shape = RoundedCornerShape(
-                                        50
-                                    )
-                                ),
-                                colors = ClickableSurfaceDefaults.colors(
-                                    contentColor = if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(
-                                        alpha = 0.15f
-                                    ),
-                                    focusedContainerColor = MaterialTheme.colorScheme.secondary,
-                                    focusedContentColor = MaterialTheme.colorScheme.onSecondary
-
+                            // Season 标题 (普通 Text)
+                            Text(
+                                text = seasonName,
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
                                 )
-                            ) {
-                                Text(
-                                    text = name,
-                                    modifier = Modifier.padding(
-                                        horizontal = 20.dp,
-                                        vertical = 10.dp
-                                    ),
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
+                            )
+
+                            // 该季的剧集 LazyRow
+                            if (seasonEpisodes.isNotEmpty()) {
+                                val maxLength = 220.dp
+                                val aspectRatios =
+                                    seasonEpisodes.mapNotNull { it.primaryImageAspectRatio?.toFloat() }
+                                val maxAspectRatio = aspectRatios.maxOrNull() ?: 1.77f
+
+                                val imgWidth = if (maxAspectRatio >= 1f) {
+                                    maxLength
+                                } else {
+                                    (maxLength.value * maxAspectRatio).dp
+                                }
+
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    contentPadding = PaddingValues(horizontal = 32.dp)
+                                ) {
+                                    items(seasonEpisodes, key = { it.id ?: it.hashCode() }) { episode ->
+                                        BuildItem(
+                                            item = episode,
+                                            imgWidth = imgWidth,
+                                            aspectRatio = maxAspectRatio,
+                                            modifier = Modifier,
+                                            isMyLibrary = false,
+                                            isShowOverview = true,
+                                            serverUrl = serverUrl,
+                                            onItemClick = { onNavigateToPlayer(episode) }
+                                        )
+                                    }
+                                }
+                            } else {
+                                Text(text = noEpisodesText, color = Color.Gray)
                             }
                         }
-                    }
-
-                    val currentSeason = seasons?.getOrNull(selectedSeasonIndex)
-                    val seasonName = currentSeason?.name ?: ""
-                    val currentEpisodes = getSeasonEpisodes(seasonName)
-
-                    if (currentEpisodes.isNotEmpty()) {
-                        val maxLength = 220.dp
-                        val aspectRatios =
-                            currentEpisodes.mapNotNull { it.primaryImageAspectRatio?.toFloat() }
-                        val maxAspectRatio = aspectRatios.maxOrNull() ?: 1.77f
-
-                        val imgWidth = if (maxAspectRatio >= 1f) {
-                            maxLength
-                        } else {
-                            (maxLength.value * maxAspectRatio).dp
-                        }
-
-                        LazyRow(
-                            state = listState,
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            contentPadding = PaddingValues(horizontal = 32.dp),
-
-                            ) {
-                            items(currentEpisodes, key = { it.id ?: it.hashCode() }) { episode ->
-                                BuildItem(
-                                    item = episode,
-                                    imgWidth = imgWidth,
-                                    aspectRatio = maxAspectRatio,
-                                    modifier = Modifier,
-                                    isMyLibrary = false,
-                                    isShowOverview = true,
-                                    serverUrl = serverUrl,
-                                    onItemClick = { onNavigateToPlayer(episode) }
-                                )
-                            }
-                        }
-                    } else {
-                        Text(text = stringResource(R.string.no_episodes_found), color = Color.Gray)
                     }
                     Spacer(modifier = Modifier.height(32.dp))
                 }
@@ -607,10 +553,10 @@ fun PersonCard(
             .scale(focusedScale = 1.1f),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Black.copy(alpha = 0.2f),
-            focusedContainerColor = MaterialTheme.colorScheme.onSurface,
+            focusedContainerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onSurface,
             pressedContentColor = MaterialTheme.colorScheme.surface,
-            focusedContentColor = MaterialTheme.colorScheme.surface
+            focusedContentColor = MaterialTheme.colorScheme.onPrimary
         ),
         modifier = Modifier.width(imgWidth)
     ) {

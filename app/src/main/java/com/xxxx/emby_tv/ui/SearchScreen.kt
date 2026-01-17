@@ -170,7 +170,7 @@ fun SearchScreen(
                                 bitmap = qrCodeBitmap!!,
                                 contentDescription = stringResource(R.string.scan_qr_hint),
                                 modifier = Modifier
-                                    .size(120.dp)
+                                    .size(180.dp)
                                     .background(Color.White, RoundedCornerShape(12.dp))
                                     .padding(6.dp)
                             )

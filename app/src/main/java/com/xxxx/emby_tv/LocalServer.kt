@@ -88,8 +88,8 @@ class LocalServer private constructor(
             try {
                 val files = HashMap<String, String>()
                 session.parseBody(files)
-                val params = session.parms
-                val query = params["query"] ?: ""
+                val params = session.parameters
+                val query = params["query"]?.firstOrNull() ?: ""
 
                 if (query.isNotEmpty()) {
                     onSearchReceived?.invoke(query)
@@ -176,13 +176,13 @@ class LocalServer private constructor(
             try {
                 val files = HashMap<String, String>()
                 session.parseBody(files)
-                val params = session.parms
+                val params = session.parameters
 
-                val protocol = params["protocol"] ?: "http"
-                val host = params["host"] ?: ""
-                val port = params["port"] ?: "8096"
-                val username = params["username"] ?: ""
-                val password = params["password"] ?: ""
+                val protocol = params["protocol"]?.firstOrNull() ?: "http"
+                val host = params["host"]?.firstOrNull() ?: ""
+                val port = params["port"]?.firstOrNull() ?: "8096"
+                val username = params["username"]?.firstOrNull() ?: ""
+                val password = params["password"]?.firstOrNull() ?: ""
 
                 if (host.isNotEmpty()) {
                     onLoginConfigReceived?.invoke(protocol, host, port, username, password)
