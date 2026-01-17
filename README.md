@@ -33,6 +33,8 @@ This is an open-source Emby client aimed at learning and exchanging technical kn
 - 支持硬解播放4k DHR视频，硬解失败时自动调用服务器转码播放，服务器硬件加速时显示⚡️
 - 支持多种主题色选择
 - 首页展示收藏列表
+- 搜索功能，支持多服务器多帐号的融合搜索
+- 支持跳过片头
 
 - Focus and key handling for TV remotes
 - Player with direct stream/transcode info
@@ -42,6 +44,8 @@ This is an open-source Emby client aimed at learning and exchanging technical kn
 - Supports hardware decoding of 4K HDR video; if hardware decoding fails, it automatically switches to server-side transcoding for playback.  A lightning bolt icon (⚡️) is displayed when server-side hardware acceleration is active.
 - Supports multiple theme color options 
 - Displays a favorites list on the homepage
+- Search function: Supports integrated searching across multiple servers and accounts. 
+- Skip Intro: Supports skipping opening credits/intros. 
 
 ## 展示 / Show
 
