@@ -163,4 +163,7 @@
     <string name="no_search_results">未找到搜索结果</string>
     <string name="search_placeholder">搜索电影、剧集&#8230;</string>
     <string name="search_failed">搜索失败: %1$s</string>
+    <string name="all_accounts">全部</string>
+    <string name="searching">正在搜索</string>
+    <string name="filtered">(已过滤)</string>
 </resources>

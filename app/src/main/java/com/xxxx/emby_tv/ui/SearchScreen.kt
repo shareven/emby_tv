@@ -3,6 +3,7 @@ package com.xxxx.emby_tv.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -45,6 +46,7 @@ import com.xxxx.emby_tv.ui.theme.ThemeColorManager
 import com.xxxx.emby_tv.ui.viewmodel.LoginViewModel
 import com.xxxx.emby_tv.ui.viewmodel.MainViewModel
 import com.xxxx.emby_tv.ui.viewmodel.SearchViewModel
+import com.xxxx.emby_tv.util.ErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -70,11 +72,12 @@ fun SearchScreen(
     // State
     var showSearchDialog by remember { mutableStateOf(false) }
     val searchResults = searchViewModel.searchResults
-    val isLoading = searchViewModel.isLoading
+    val isSearching = searchViewModel.isSearching
     // val isLoadingMore = searchViewModel.isLoadingMore // Removed in ViewModel
     // val hasMoreData = searchViewModel.hasMoreData // Removed in ViewModel
     val totalCount = searchViewModel.totalCount
     val currentQuery = searchViewModel.currentQuery
+    val searchProgress = searchViewModel.searchProgress
 
     // Server & QR Code State
     var qrCodeBitmap by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
@@ -191,9 +194,76 @@ fun SearchScreen(
                     }
                 }
 
+                // All Accounts Option (Only show when there are multiple accounts)
+                if (sortedAccounts.size > 1) {
+                    item {
+                        val isAllSelected = searchViewModel.filterAccount == null
+                        Surface(
+                            onClick = {
+                                searchViewModel.setAccountFilter(null)
+                            },
+                            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+                            colors = ClickableSurfaceDefaults.colors(
+                                containerColor = if (isAllSelected) MaterialTheme.colorScheme.primary.copy(
+                                    alpha = 0.2f
+                                ) else Color.White.copy(alpha = 0.05f),
+                                focusedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                                contentColor = Color.White,
+                                focusedContentColor = Color.White
+                            ),
+                            border = ClickableSurfaceDefaults.border(
+                                border = if (isAllSelected) Border(
+                                    BorderStroke(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                    )
+                                ) else Border(BorderStroke(0.dp, Color.Transparent)),
+                                focusedBorder = Border(
+                                    BorderStroke(
+                                        2.dp,
+                                        MaterialTheme.colorScheme.primary
+                                    )
+                                )
+                            ),
+                            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(60.dp)
+                                .onFocusChanged { focusState ->
+                                    if (focusState.isFocused) {
+                                        searchViewModel.setAccountFilter(null)
+                                    }
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = if (isAllSelected) MaterialTheme.colorScheme.primary else Color.White.copy(
+                                        alpha = 0.6f
+                                    ),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = stringResource(R.string.all_accounts),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isAllSelected) Color.White else Color.White.copy(
+                                        alpha = 0.8f
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
 
                 itemsIndexed(sortedAccounts, key = { _, acc -> acc.id }) { _, account ->
-                    val isCurrent = account.id == currentAccountId
+                    val isSelected = searchViewModel.filterAccount?.id == account.id
                     // Use domain logic from original code
                     val domain = try {
                         val uri = java.net.URI(account.serverUrl)
@@ -209,7 +279,7 @@ fun SearchScreen(
                         },
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
                         colors = ClickableSurfaceDefaults.colors(
-                            containerColor = if (isCurrent) MaterialTheme.colorScheme.primary.copy(
+                            containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(
                                 alpha = 0.2f
                             ) else Color.White.copy(alpha = 0.05f),
                             focusedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
@@ -217,7 +287,7 @@ fun SearchScreen(
                             focusedContentColor = Color.White
                         ),
                         border = ClickableSurfaceDefaults.border(
-                            border = if (isCurrent) Border(
+                            border = if (isSelected) Border(
                                 BorderStroke(
                                     1.dp,
                                     MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
@@ -249,7 +319,7 @@ fun SearchScreen(
                             Icon(
                                 imageVector = Icons.Default.Person,
                                 contentDescription = null,
-                                tint = if (isCurrent) MaterialTheme.colorScheme.primary else Color.White.copy(
+                                tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(
                                     alpha = 0.6f
                                 ),
                                 modifier = Modifier.size(20.dp)
@@ -260,7 +330,7 @@ fun SearchScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                color = if (isCurrent) Color.White else Color.White.copy(alpha = 0.8f)
+                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.8f)
                             )
 
                         }
@@ -297,7 +367,7 @@ fun SearchScreen(
                 Surface(
                     onClick = { showSearchDialog = true },
                     modifier = Modifier
-                        .weight(1f)
+                        .width(300.dp)
                         .height(56.dp)
                         .focusRequester(searchInputFocusRequester)
                         .onFocusChanged {
@@ -352,21 +422,26 @@ fun SearchScreen(
                 }
 
                 Spacer(modifier = Modifier.width(24.dp))
+                // Search Results Info
+                if (searchResults != null) {
+                    val progressText = if (isSearching) {
+                        " | ${stringResource(R.string.searching)}: ${searchProgress.first}/${searchProgress.second}"
+                    } else {
+                        ""
+                    }
+                    val filterText =
+                        if (searchViewModel.filterAccount != null) " ${stringResource(R.string.filtered)}" else ""
+                    Text(
+                        text = "${searchResults.size} / $totalCount$filterText$progressText",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.5f),
+                    )
+                }
             }
 
-            // Search Results Info
-            if (searchResults != null) {
-                val filterText = if (searchViewModel.filterAccount != null) " (Filtered)" else ""
-                Text(
-                    text = "${searchResults.size} / $totalCount$filterText",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.5f),
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-            }
 
             // Search Results Grid
-            if (searchResults == null && isLoading) {
+            if (searchResults == null && isSearching) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Loading()
                 }

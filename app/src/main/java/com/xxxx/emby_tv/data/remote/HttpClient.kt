@@ -45,8 +45,8 @@ object HttpClient {
                 maxRequestsPerHost = 20
             })
             .connectionPool(ConnectionPool(10, 2, TimeUnit.MINUTES))
-            .connectTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(5, TimeUnit.SECONDS)
+            .connectTimeout(6, TimeUnit.SECONDS)
+            .readTimeout(6, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build()
     }

@@ -163,4 +163,7 @@
     <string name="no_search_results">No results found</string>
     <string name="search_placeholder">Search for movies, series&#8230;</string>
     <string name="search_failed">Search failed: %1$s</string>
+    <string name="all_accounts">All</string>
+    <string name="searching">Searching</string>
+    <string name="filtered">(Filtered)</string>
 </resources>

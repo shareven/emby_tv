@@ -141,7 +141,7 @@ object EmbyApi {
             val type = object : com.google.gson.reflect.TypeToken<EmbyResponseDto<BaseItemDto>>() {}.type
             val response: EmbyResponseDto<BaseItemDto>? = gson.fromJson(reader, type)
             val items = response?.items ?: emptyList()
-            val totalCount = response?.totalRecordCount ?: items.size
+            val totalCount = response?.totalRecordCount?.takeIf { it > 0 } ?: items.size
             Pair(items, totalCount)
         } ?: Pair(emptyList(), 0)
     }

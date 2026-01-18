@@ -12,11 +12,18 @@ import com.xxxx.emby_tv.data.remote.EmbyApi
 import com.xxxx.emby_tv.data.repository.EmbyRepository
 import com.xxxx.emby_tv.data.session.AccountInfo
 import com.xxxx.emby_tv.util.ErrorHandler
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.concurrent.Semaphore
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 搜索结果包装类，包含所属账号信息
@@ -38,6 +45,7 @@ data class SearchResultModel(
 class SearchViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = EmbyRepository.getInstance(application)
     private val context = application
+    private var searchJob: Job? = null
 
     companion object {
         private const val TAG = "SearchViewModel"
@@ -67,7 +75,9 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         }
     
     // === 状态 ===
-    var isLoading by mutableStateOf(false)
+    var isSearching by mutableStateOf(false)
+        private set
+    var searchProgress by mutableStateOf(0 to 0) // (已完成账号数, 总账号数)
         private set
     var errorMessage by mutableStateOf<String?>(null)
 
@@ -76,7 +86,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         private set
 
     /**
-     * 执行多账号并发搜索
+     * 执行多账号并发搜索（实时显示结果）
      */
     fun search(query: String) {
         if (query.isBlank()) {
@@ -84,66 +94,76 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
 
-        // 如果搜索词没变且已有数据，不重复搜索 (除非强制刷新，这里简单处理)
+        // 如果搜索词没变且已有数据，不重复搜索
         if (query == currentQuery && _allSearchResults != null) {
             return
         }
 
         currentQuery = query
-        filterAccount = null // 重置过滤
+        filterAccount = null
 
-        viewModelScope.launch {
-            isLoading = true
+        searchJob = viewModelScope.launch {
+            isSearching = true
             _allSearchResults = null
             errorMessage = null
             totalCount = 0
+            searchProgress = 0 to 0
 
             try {
                 val accounts = repository.savedAccounts
                 if (accounts.isEmpty()) {
-                    // 没有账号，可能是异常状态
-                    isLoading = false
+                    isSearching = false
                     return@launch
                 }
 
-                // 按当前账号排序：当前账号排第一，其他不变 (或者按名称排，这里只保证当前优先)
                 val currentId = repository.currentAccountId
                 val sortedAccounts = accounts.sortedByDescending { it.id == currentId }
+                val totalAccounts = sortedAccounts.size
+                val semaphore = Semaphore(MAX_CONCURRENT_REQUESTS)
+                val completedCount = AtomicInteger(0)
+                val resultsMutex = Mutex()
 
-                // 分批并发请求，每次最多 MAX_CONCURRENT_REQUESTS 个
-                val allResults = mutableListOf<SearchResultModel>()
-                var total = 0
+                val jobs = sortedAccounts.map { account ->
+                    async {
+                        semaphore.acquire()
+                        try {
+                            if (!coroutineContext.isActive) return@async
 
-                // 使用 chunked 分批处理
-                val chunks = sortedAccounts.chunked(MAX_CONCURRENT_REQUESTS)
-                
-                withContext(Dispatchers.IO) {
-                    chunks.forEach { batchAccounts ->
-                        val deferreds = batchAccounts.map { account ->
-                            async {
-                                searchAccount(account, query)
+                            val (items, count) = searchAccount(account, query)
+
+                            if (!coroutineContext.isActive) return@async
+
+                            resultsMutex.withLock {
+                                _allSearchResults = (_allSearchResults ?: emptyList()) + items
+                                totalCount += count
                             }
-                        }
-                        // 等待这一批完成
-                        val batchResults = deferreds.awaitAll()
-                        batchResults.forEach { (items, count) ->
-                            allResults.addAll(items)
-                            total += count
+
+                            searchProgress = completedCount.incrementAndGet() to totalAccounts
+
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            completedCount.incrementAndGet()
+                            searchProgress = completedCount.get() to totalAccounts
+                        } finally {
+                            semaphore.release()
                         }
                     }
                 }
 
-                _allSearchResults = allResults
-                totalCount = total
-                
-                ErrorHandler.logDebug(TAG, "多账号搜索完成: ${allResults.size} 条结果, 总计 $total")
+                jobs.awaitAll()
+                ErrorHandler.logDebug(TAG, "多账号搜索完成: ${_allSearchResults?.size ?: 0} 条结果, 总计 $totalCount")
 
+            } catch (e: CancellationException) {
+                ErrorHandler.logDebug(TAG, "搜索已取消")
+                _allSearchResults = _allSearchResults ?: emptyList()
             } catch (e: Exception) {
                 ErrorHandler.logError(TAG, "搜索失败", e)
-                _allSearchResults = emptyList()
+                _allSearchResults = _allSearchResults ?: emptyList()
                 errorMessage = e.message ?: "搜索失败"
             } finally {
-                isLoading = false
+                isSearching = false
+                searchJob = null
             }
         }
     }
@@ -197,6 +217,15 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
+     * 取消正在进行的搜索
+     */
+    fun cancelSearch() {
+        searchJob?.cancel()
+        searchJob = null
+        isSearching = false
+    }
+
+    /**
      * 清空
      */
     fun clearResults() {
@@ -205,5 +234,6 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         filterAccount = null
         totalCount = 0
         errorMessage = null
+        searchProgress = 0 to 0
     }
 }

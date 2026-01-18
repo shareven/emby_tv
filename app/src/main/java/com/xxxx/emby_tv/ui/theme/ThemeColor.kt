@@ -84,7 +84,7 @@ object ThemeColorManager {
             primaryDark = Color(0xFF388e3c),
             // 模仿 purple 逻辑：配琥珀黄 (Green -> Amber) 像热带水果
             secondary = Color(0xFFffc107),
-            secondaryLight = Color(0xFFffecb3),
+            secondaryLight = Color(0xFFEABB2A),
             secondaryDark = Color(0xFFff8f00)
         ),
         ThemeColor(
@@ -103,7 +103,7 @@ object ThemeColorManager {
             id = "amber",
             name = context.getString(com.xxxx.emby_tv.R.string.theme_color_amber),
             primary = Color(0xFFffc107), // 琥珀金
-            primaryLight = Color(0xFFECD182),
+            primaryLight = Color(0xFFF3BD1B),
             primaryDark = Color(0xFFCC7607),
             // 【重改】配 亮紫色 (Amber -> Bright Purple)
             // 就像紫配红一样，黄配紫是极高饱和度的时尚撞色，非常显眼
