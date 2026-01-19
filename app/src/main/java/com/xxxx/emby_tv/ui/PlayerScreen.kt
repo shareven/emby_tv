@@ -80,7 +80,7 @@ import com.xxxx.emby_tv.ui.components.ResumePlaybackButtons
 import com.xxxx.emby_tv.ui.components.SkipIntroButton
 import com.xxxx.emby_tv.ui.components.getAudioTrack
 import com.xxxx.emby_tv.ui.components.getVideoTrack
-import com.xxxx.emby_tv.ui.player.PlayerReporting
+
 import com.xxxx.emby_tv.ui.player.PlayerTrackManager
 import com.xxxx.emby_tv.ui.player.SubtitleConfigBuilder
 import com.xxxx.emby_tv.ui.viewmodel.PlayerViewModel
@@ -225,21 +225,6 @@ fun PlayerScreen(
     // Long press state
     var leftKeyDownTime by remember { mutableStateOf(0L) }
     var rightKeyDownTime by remember { mutableStateOf(0L) }
-
-    // 使用 PlayerReporting 报告播放停止
-    fun reportStopped() {
-        scope.launch {
-            PlayerReporting.reportStopped(
-                repository = repository,
-                mediaId = mediaId,
-                media = media,
-                position = position,
-                selectedSubtitleIndex = selectedSubtitleIndex,
-                selectedAudioIndex = selectedAudioIndex
-            )
-        }
-    }
-
 
     // 即使暂停播放也不会熄屏
     DisposableEffect(view) {
@@ -548,7 +533,7 @@ fun PlayerScreen(
         }
     }
 
-    // Session Reporting & Updates - 使用 PlayerReporting 定期报告进度
+    // Session Reporting & Updates - 使用 playerViewModel 定期报告进度
     LaunchedEffect(isPlaying) {
         if (isPlaying) {
             var tickCount = 0
@@ -556,8 +541,7 @@ fun PlayerScreen(
                 try {
                     // 每 5 秒报告一次进度
                     if (tickCount % 5 == 0) {
-                        PlayerReporting.reportProgress(
-                            repository = repository,
+                        playerViewModel.reportProgress(
                             mediaId = mediaId,
                             media = media,
                             position = position,
@@ -574,12 +558,11 @@ fun PlayerScreen(
         }
     }
 
-    // Initial Playing Report - 使用 PlayerReporting 报告播放开始
+    // Initial Playing Report - 使用 playerViewModel 报告播放开始
     LaunchedEffect(isPlaying, videoUrl) {
         if (isPlaying && videoUrl != null && !hasReportedPlaying) {
             try {
-                PlayerReporting.reportPlaying(
-                    repository = repository,
+                playerViewModel.reportPlaying(
                     mediaId = mediaId,
                     media = media,
                     position = position,
@@ -768,12 +751,24 @@ fun PlayerScreen(
                             }
                         } else {
                             // 播放结束，发送停止报告
-                            reportStopped()
+                            playerViewModel.reportStopped(
+                                mediaId = mediaId,
+                                media = media,
+                                position = position,
+                                selectedSubtitleIndex = selectedSubtitleIndex,
+                                selectedAudioIndex = selectedAudioIndex
+                            )
                             onBack()
                         }
                     } else {
                         // 播放结束，发送停止报告
-                        reportStopped()
+                        playerViewModel.reportStopped(
+                            mediaId = mediaId,
+                            media = media,
+                            position = position,
+                            selectedSubtitleIndex = selectedSubtitleIndex,
+                            selectedAudioIndex = selectedAudioIndex
+                        )
                         onBack()
                     }
                 }
@@ -808,7 +803,14 @@ fun PlayerScreen(
         onDispose {
             bandwidthMeter.removeEventListener(bandwidthListener)
             // 发送停止报告
-            reportStopped()
+            playerViewModel.reportStopped(
+                mediaId = mediaId,
+                media = media,
+                position = position,
+                selectedSubtitleIndex = selectedSubtitleIndex,
+                selectedAudioIndex = selectedAudioIndex
+            )
+            onBack()
             player.removeListener(listener)
             player.setVideoSurface(null)
             player.release()

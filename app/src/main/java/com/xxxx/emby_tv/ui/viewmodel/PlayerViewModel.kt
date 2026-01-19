@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.xxxx.emby_tv.Utils
 import com.xxxx.emby_tv.data.repository.EmbyRepository
 import com.xxxx.emby_tv.data.model.MediaDto
 import com.xxxx.emby_tv.data.model.MediaSourceInfoDto
@@ -127,11 +128,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun reportPlaying(
         mediaId: String,
-        positionTicks: Long = 0
+        media: MediaDto,
+        position: Long,
+        selectedSubtitleIndex: Int,
+        selectedAudioIndex: Int
     ) {
         viewModelScope.launch(Dispatchers.IO + NonCancellable) {
             try {
-                val body = buildPlayingBody(mediaId, positionTicks)
+                val body = buildPlayingBody(mediaId, media, position, selectedSubtitleIndex, selectedAudioIndex)
                 repository.playing(body)
             } catch (e: Exception) {
                 ErrorHandler.logError("PlayerViewModel", "操作失败", e)
@@ -144,12 +148,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun reportProgress(
         mediaId: String,
-        positionTicks: Long,
+        media: MediaDto,
+        position: Long,
+        selectedSubtitleIndex: Int,
+        selectedAudioIndex: Int,
         isPaused: Boolean = false
     ) {
         viewModelScope.launch(Dispatchers.IO + NonCancellable) {
             try {
-                val body = buildProgressBody(mediaId, positionTicks, isPaused)
+                val body = buildProgressBody(mediaId, media, position, selectedSubtitleIndex, selectedAudioIndex, isPaused)
                 repository.reportPlaybackProgress(body)
             } catch (e: Exception) {
                 ErrorHandler.logError("PlayerViewModel", "操作失败", e)
@@ -162,16 +169,21 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun reportStopped(
         mediaId: String,
-        positionTicks: Long
+        media: MediaDto,
+        position: Long,
+        selectedSubtitleIndex: Int,
+        selectedAudioIndex: Int
     ) {
         viewModelScope.launch(Dispatchers.IO + NonCancellable) {
             try {
-                val body = buildStoppedBody(mediaId, positionTicks)
+                val body = buildStoppedBody(mediaId, media, position, selectedSubtitleIndex, selectedAudioIndex)
                 repository.stopped(body)
 
                 // 停止活动编码
-                playSessionId?.let { sessionId ->
-                    repository.stopActiveEncodings(sessionId)
+                if(media.mediaSources?.firstOrNull()?.transcodingUrl != null){
+                    media.playSessionId?.let { sessionId ->
+                        repository.stopActiveEncodings(sessionId)
+                    }
                 }
             } catch (e: Exception) {
                 ErrorHandler.logError("PlayerViewModel", "操作失败", e)
@@ -226,55 +238,119 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     // === 构建请求体 ===
 
-    private fun buildPlayingBody(mediaId: String, positionTicks: Long): Map<String, Any?> {
+    private fun buildPlayingBody(
+        mediaId: String,
+        media: MediaDto,
+        position: Long,
+        selectedSubtitleIndex: Int,
+        selectedAudioIndex: Int
+    ): Map<String, Any?> {
+        val ticks = position * 10000
+        val playMethod = Utils.determinePlayMethod(media)
+        val mediaSources = media.mediaSources
+        val firstSource = mediaSources?.firstOrNull()
+        val runTimeTicks = firstSource?.runTimeTicks ?: 0L
+        val mediaSourceId = firstSource?.id ?: ""
+
         return mapOf(
-            "ItemId" to mediaId,
-            "MediaSourceId" to mediaSourceId,
-            "PlaySessionId" to playSessionId,
-            "PositionTicks" to positionTicks,
-            "CanSeek" to true,
-            "IsPaused" to false,
+            "VolumeLevel" to 100,
             "IsMuted" to false,
-            "PlayMethod" to getPlayMethod(),
+            "IsPaused" to false,
+            "RepeatMode" to "RepeatNone",
+            "Shuffle" to false,
+            "SubtitleOffset" to 0,
+            "PlaybackRate" to 1,
+            "MaxStreamingBitrate" to 200000000,
+            "PositionTicks" to ticks,
+            "PlaybackStartTimeTicks" to System.currentTimeMillis() * 10000,
+            "SubtitleStreamIndex" to selectedSubtitleIndex,
             "AudioStreamIndex" to selectedAudioIndex,
-            "SubtitleStreamIndex" to selectedSubtitleIndex
+            "BufferedRanges" to emptyList<Any>(),
+            "SeekableRanges" to listOf(
+                mapOf("start" to 0, "end" to runTimeTicks)
+            ),
+            "PlayMethod" to playMethod,
+            "PlaySessionId" to (media.playSessionId ?: ""),
+            "MediaSourceId" to mediaSourceId,
+            "CanSeek" to true,
+            "ItemId" to mediaId
         )
     }
 
     private fun buildProgressBody(
         mediaId: String,
-        positionTicks: Long,
+        media: MediaDto,
+        position: Long,
+        selectedSubtitleIndex: Int,
+        selectedAudioIndex: Int,
         isPaused: Boolean
     ): Map<String, Any?> {
+        val ticks = position * 10000
+        val playMethod = Utils.determinePlayMethod(media)
+        val mediaSources = media.mediaSources
+        val firstSource = mediaSources?.firstOrNull()
+        val runTimeTicks = firstSource?.runTimeTicks ?: 0L
+        val mediaSourceId = firstSource?.id ?: ""
+
         return mapOf(
-            "ItemId" to mediaId,
-            "MediaSourceId" to mediaSourceId,
-            "PlaySessionId" to playSessionId,
-            "PositionTicks" to positionTicks,
-            "CanSeek" to true,
-            "IsPaused" to isPaused,
+            "VolumeLevel" to 100,
             "IsMuted" to false,
-            "PlayMethod" to getPlayMethod(),
+            "IsPaused" to isPaused,
+            "RepeatMode" to "RepeatNone",
+            "PositionTicks" to ticks,
+            "PlaybackStartTimeTicks" to System.currentTimeMillis() * 10000,
+            "SubtitleStreamIndex" to selectedSubtitleIndex,
             "AudioStreamIndex" to selectedAudioIndex,
-            "SubtitleStreamIndex" to selectedSubtitleIndex
-        )
-    }
-
-    private fun buildStoppedBody(mediaId: String, positionTicks: Long): Map<String, Any?> {
-        return mapOf(
-            "ItemId" to mediaId,
+            "BufferedRanges" to emptyList<Any>(),
+            "SeekableRanges" to listOf(
+                mapOf("start" to 0, "end" to runTimeTicks)
+            ),
+            "PlayMethod" to playMethod,
+            "PlaySessionId" to (media.playSessionId ?: ""),
             "MediaSourceId" to mediaSourceId,
-            "PlaySessionId" to playSessionId,
-            "PositionTicks" to positionTicks,
-            "PlayMethod" to getPlayMethod()
+            "CanSeek" to true,
+            "ItemId" to mediaId,
+            "EventName" to "timeupdate"
         )
     }
 
-    private fun getPlayMethod(): String {
-        return if (currentMediaSource?.transcodingUrl != null) {
-            "Transcode"
-        } else {
-            "DirectPlay"
-        }
+    private fun buildStoppedBody(
+        mediaId: String,
+        media: MediaDto,
+        position: Long,
+        selectedSubtitleIndex: Int,
+        selectedAudioIndex: Int
+    ): Map<String, Any?> {
+        val ticks = position * 10000
+        val playMethod = Utils.determinePlayMethod(media)
+        val mediaSources = media.mediaSources
+        val firstSource = mediaSources?.firstOrNull()
+        val runTimeTicks = firstSource?.runTimeTicks ?: 0L
+        val mediaSourceId = firstSource?.id ?: ""
+
+        return mapOf(
+            "VolumeLevel" to 100,
+            "IsMuted" to false,
+            "IsPaused" to true,
+            "RepeatMode" to "RepeatNone",
+            "Shuffle" to false,
+            "SubtitleOffset" to 0,
+            "PlaybackRate" to 1,
+            "MaxStreamingBitrate" to 200000000,
+            "PositionTicks" to ticks,
+            "PlaybackStartTimeTicks" to System.currentTimeMillis() * 10000,
+            "SubtitleStreamIndex" to selectedSubtitleIndex,
+            "AudioStreamIndex" to selectedAudioIndex,
+            "BufferedRanges" to emptyList<Any>(),
+            "SeekableRanges" to listOf(
+                mapOf("start" to 0, "end" to runTimeTicks)
+            ),
+            "PlayMethod" to playMethod,
+            "PlaySessionId" to (media.playSessionId ?: ""),
+            "MediaSourceId" to mediaSourceId,
+            "CanSeek" to true,
+            "ItemId" to mediaId,
+            "EventName" to "Stopped"
+        )
     }
 }
