@@ -71,7 +71,7 @@ fun MediaDetailScreen(
         seasons = null
         episodes = null
         resume = null
-        if (mediaInfo != null && mediaInfo.isSeries) {
+        if (mediaInfo != null && mediaInfo.isSeries&&!isLoadingSeriesData) {
             isLoadingSeriesData = true
             try {
                 val seasonsList = detailViewModel.getSeasonList(seriesId)
