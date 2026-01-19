@@ -62,7 +62,6 @@ fun SearchScreen(
     searchViewModel: SearchViewModel,
     loginViewModel: LoginViewModel,
     mainViewModel: MainViewModel,
-    onNavigateBack: () -> Unit,
     onNavigateToSeries: (String) -> Unit,
 ) {
     val context = LocalContext.current

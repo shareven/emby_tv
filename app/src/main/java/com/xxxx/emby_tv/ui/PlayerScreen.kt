@@ -103,8 +103,8 @@ fun PlayerScreen(
     mediaId: String,
     playbackPositionTicks: Long = 0L,
     onPlaybackStateChanged: (isPlaying: Boolean) -> Unit = {},
-    onBack: () -> Unit,
     onNavigateToPlayer: (BaseItemDto) -> Unit = {},
+    onExit: () -> Unit = {},  // 添加退出回调
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -521,14 +521,14 @@ fun PlayerScreen(
                         val nextEpisode = episodes[currentIndex + 1]
                         onNavigateToPlayer(nextEpisode)
                     } else {
-                        onBack()
+                        
                     }
                 } catch (e: Exception) {
                     ErrorHandler.logError("PlayerScreen", "操作失败", e)
-                    onBack()
+                    
                 }
             } else {
-                onBack()
+                
             }
         }
     }
@@ -758,7 +758,7 @@ fun PlayerScreen(
                                 selectedSubtitleIndex = selectedSubtitleIndex,
                                 selectedAudioIndex = selectedAudioIndex
                             )
-                            onBack()
+                            
                         }
                     } else {
                         // 播放结束，发送停止报告
@@ -769,7 +769,7 @@ fun PlayerScreen(
                             selectedSubtitleIndex = selectedSubtitleIndex,
                             selectedAudioIndex = selectedAudioIndex
                         )
-                        onBack()
+                        
                     }
                 }
             }
@@ -810,7 +810,7 @@ fun PlayerScreen(
                 selectedSubtitleIndex = selectedSubtitleIndex,
                 selectedAudioIndex = selectedAudioIndex
             )
-            onBack()
+            
             player.removeListener(listener)
             player.setVideoSurface(null)
             player.release()

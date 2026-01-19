@@ -18,8 +18,7 @@ import com.xxxx.emby_tv.ui.viewmodel.UpdateViewModel
 
 @Composable
 fun UpdateScreen(
-    updateViewModel: UpdateViewModel,
-    onNavigateBack: () -> Unit
+    updateViewModel: UpdateViewModel
 ) {
     val context = LocalContext.current
     val activity = context as? Activity ?: return

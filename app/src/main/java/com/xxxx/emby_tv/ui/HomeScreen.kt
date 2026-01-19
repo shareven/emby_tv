@@ -121,9 +121,9 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         // 数据未加载完成时显示 Loading 组件
-        if(isLoading){
-            Loading()
-        }
+//        if(isLoading){
+//            Loading()
+//        }
         if (libraryLatestItems != null) {
             LazyColumn(
                 modifier = Modifier.weight(1f),

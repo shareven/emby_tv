@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
@@ -61,7 +62,7 @@ fun EmbyTvApp() {
     
     // 使用新的 MainViewModel
     val mainViewModel: MainViewModel = viewModel()
-    
+
     // 响应式监听状态变化
     val isLoaded = mainViewModel.isLoaded
     val isLoggedIn = mainViewModel.isLoggedIn
@@ -130,8 +131,23 @@ fun EmbyTvApp() {
                     }
 
                     // 主页面
-                    composable("home") {
+                    composable("home") { backStackEntry ->
                         val homeViewModel: HomeViewModel = viewModel()
+
+                        // 使用 rememberSaveable 保存是否已经初始加载过
+                        var isInitialLoaded by rememberSaveable { mutableStateOf(false) }
+
+                        // 监听路由返回，延迟刷新
+                        LaunchedEffect(backStackEntry) {
+                            // 如果不是首次加载（说明是从其他页面返回），则刷新数据
+                            if (isInitialLoaded) {
+                                 homeViewModel.loadData()
+                            } else {
+                                // 首次加载，不刷新
+                                isInitialLoaded = true
+                             }
+                        }
+
                         HomeScreen(
                             homeViewModel = homeViewModel,
                             mainViewModel = mainViewModel,
@@ -149,9 +165,6 @@ fun EmbyTvApp() {
                             mainViewModel = mainViewModel,
                             savedAccounts = loginViewModel.savedAccounts,
                             currentAccountId = loginViewModel.currentAccountId,
-                            onBack = {
-                                navController.popBackStack()
-                            },
                             onSwitchAccount = { accountId ->
                                 loginViewModel.switchAccount(
                                     accountId = accountId,
@@ -178,10 +191,7 @@ fun EmbyTvApp() {
                     composable("update") {
                         val updateViewModel: UpdateViewModel = viewModel()
                         UpdateScreen(
-                            updateViewModel = updateViewModel,
-                            onNavigateBack = {
-                                navController.popBackStack()
-                            }
+                            updateViewModel = updateViewModel
                         )
                     }
 
@@ -193,9 +203,6 @@ fun EmbyTvApp() {
                             searchViewModel = searchViewModel,
                             loginViewModel = loginViewModel,
                             mainViewModel = mainViewModel,
-                            onNavigateBack = {
-                                navController.popBackStack()
-                            },
                             onNavigateToSeries = { seriesId ->
                                 navController.navigate("series/$seriesId")
                             }
@@ -221,15 +228,12 @@ fun EmbyTvApp() {
                         val libraryName = backStackEntry.arguments?.getString("libraryName") ?: ""
                         val type = backStackEntry.arguments?.getString("type") ?: ""
                         val libraryViewModel: LibraryViewModel = viewModel()
-                        
+
                         LibraryScreen(
                             parentId = libraryId,
                             title = libraryName,
                             type = type,
                             libraryViewModel = libraryViewModel,
-                            onNavigateBack = {
-                                navController.popBackStack()
-                            },
                             onNavigateToSeries = { seriesId ->
                                 navController.navigate("series/$seriesId")
                             }
@@ -243,7 +247,6 @@ fun EmbyTvApp() {
                     ) { backStackEntry ->
                         val seriesId = backStackEntry.arguments?.getString("seriesId") ?: ""
                         val detailViewModel: DetailViewModel = viewModel()
-                        
                         MediaDetailScreen(
                             seriesId = seriesId,
                             detailViewModel = detailViewModel,
@@ -265,7 +268,7 @@ fun EmbyTvApp() {
                     ) { backStackEntry ->
                         val mediaId = backStackEntry.arguments?.getString("mediaId") ?: ""
                         val detailViewModel: DetailViewModel = viewModel()
-                        
+
                         MediaDetailScreen(
                             seriesId = mediaId,
                             detailViewModel = detailViewModel,
@@ -294,16 +297,11 @@ fun EmbyTvApp() {
                         val mediaId = backStackEntry.arguments?.getString("mediaId") ?: ""
                         val playbackPositionTicks = backStackEntry.arguments?.getLong("position") ?: 0L
                         val playerViewModel: PlayerViewModel = viewModel()
-                        val homeViewModel: HomeViewModel = viewModel()
-                        
+
                         PlayerScreen(
                             mediaId = mediaId,
                             playbackPositionTicks = playbackPositionTicks,
                             playerViewModel = playerViewModel,
-                            onBack = {
-                                homeViewModel.refresh()
-                                navController.popBackStack()
-                            },
                             onNavigateToPlayer = { nextItem ->
                                 val nextId = nextItem.id ?: ""
                                 val nextPos = nextItem.userData?.playbackPositionTicks ?: 0L

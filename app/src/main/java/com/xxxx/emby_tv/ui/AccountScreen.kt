@@ -37,7 +37,6 @@ fun AccountScreen(
     mainViewModel: MainViewModel,
     savedAccounts: List<AccountInfo>,
     currentAccountId: String?,
-    onBack: () -> Unit,
     onSwitchAccount: (String) -> Unit,
     onDeleteAccount: (String) -> Unit,
     onAddAccount: () -> Unit
@@ -149,7 +148,6 @@ fun AccountScreen(
                 ) {
                     // 添加账号按钮
                     Surface(
-                        onClick = onAddAccount,
                         modifier = Modifier
                             .weight(1f)
                             .height(52.dp)
@@ -157,6 +155,7 @@ fun AccountScreen(
                                 if (savedAccounts.isEmpty()) Modifier.focusRequester(firstItemFocusRequester)
                                 else Modifier
                             ),
+                        onClick = onAddAccount,
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
                         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
                         colors = ClickableSurfaceDefaults.colors(
@@ -179,34 +178,6 @@ fun AccountScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = stringResource(R.string.add_account),
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            )
-                        }
-                    }
-
-                    // 返回按钮
-                    Surface(
-                        onClick = onBack,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(52.dp),
-                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
-                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = Color.White.copy(alpha = 0.08f),
-                            focusedContainerColor = Color.White.copy(alpha = 0.95f),
-                            contentColor = Color.White,
-                            focusedContentColor = Color.Black
-                        )
-                    ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = stringResource(R.string.back),
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontWeight = FontWeight.SemiBold
                                 )

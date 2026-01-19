@@ -32,7 +32,6 @@ fun LibraryScreen(
     title: String,
     type: String,
     libraryViewModel: LibraryViewModel,
-    onNavigateBack: () -> Unit,
     onNavigateToSeries: (String) -> Unit
 ) {
     val context = LocalContext.current
