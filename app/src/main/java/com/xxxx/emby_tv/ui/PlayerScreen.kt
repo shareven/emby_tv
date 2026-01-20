@@ -61,6 +61,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.upstream.BandwidthMeter
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
 import com.xxxx.emby_tv.R
@@ -143,7 +144,7 @@ fun PlayerScreen(
     var endedHandled by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var showStats by remember { mutableStateOf(false) }
-    
+
     // 继续播放/从头开始 按钮状态
     var showResumeButtons by remember { mutableStateOf(playbackPositionTicks > 0) }
     var resumeButtonsShownOnce by remember { mutableStateOf(false) }
@@ -163,7 +164,6 @@ fun PlayerScreen(
 
     val playbackInfoFailText = stringResource(R.string.failed_get_playback_info)
     var playbackTrigger by remember { mutableStateOf(0) }
-
 
     // TrackSelector
     val trackSelector = remember {
@@ -356,7 +356,9 @@ fun PlayerScreen(
         selectedAudioIndex = audioIndex
         selectedSubtitleIndex = subIndex
         hasTriedTranscodeFallback = false
-        if (needChange&&!(media.mediaSources?.firstOrNull()?.supportsDirectPlay?:false)) playbackTrigger++ // 只有手动修改时，才递增触发器，重启协程
+        if (needChange && !(media.mediaSources?.firstOrNull()?.supportsDirectPlay
+                ?: false)
+        ) playbackTrigger++ // 只有手动修改时，才递增触发器，重启协程
     }
 
     // 数据加载逻辑
@@ -464,7 +466,7 @@ fun PlayerScreen(
                 apiKey = apiKey,
                 selectedSubtitleIndex = selectedSubtitleIndex
             )
-           
+
             val mediaItemBuilder = MediaItem.Builder()
                 .setUri(videoUrl)
                 .setSubtitleConfigurations(subtitleConfigs)
@@ -494,7 +496,12 @@ fun PlayerScreen(
 
     // 更新选中字幕 - 使用 PlayerTrackManager
     LaunchedEffect(selectedSubtitleIndex, subtitleTracks, currentTracks) {
-        PlayerTrackManager.selectSubtitle(player, subtitleTracks, selectedSubtitleIndex, currentTracks)
+        PlayerTrackManager.selectSubtitle(
+            player,
+            subtitleTracks,
+            selectedSubtitleIndex,
+            currentTracks
+        )
     }
 
     // 更新选中音频 - 使用 PlayerTrackManager
@@ -521,14 +528,14 @@ fun PlayerScreen(
                         val nextEpisode = episodes[currentIndex + 1]
                         onNavigateToPlayer(nextEpisode)
                     } else {
-                        
+
                     }
                 } catch (e: Exception) {
                     ErrorHandler.logError("PlayerScreen", "操作失败", e)
-                    
+
                 }
             } else {
-                
+
             }
         }
     }
@@ -673,7 +680,7 @@ fun PlayerScreen(
         if (introStartMs != null && introEndMs != null && isPlaying) {
             // 检查是否在片头范围内
             val inIntroRange = position >= introStartMs!! && position < introEndMs!!
-            
+
             if (inIntroRange) {
                 // 如果启用了自动跳过且还未跳过，则自动跳过
                 if (autoSkipIntro && !hasAutoSkipped) {
@@ -721,13 +728,13 @@ fun PlayerScreen(
                 if (state == Player.STATE_BUFFERING) {
                     isBuffering = true
                 } else if (state == Player.STATE_READY) {
-                    isBuffering = false             
-                   // 在STATE_READY时获取准确时长
-                   val rawDuration = player.duration
-                   if (rawDuration > 0) {
-                       duration = rawDuration
-                       Log.d("Player", "Duration updated from READY state: $duration ms")
-                   }
+                    isBuffering = false
+                    // 在STATE_READY时获取准确时长
+                    val rawDuration = player.duration
+                    if (rawDuration > 0) {
+                        duration = rawDuration
+                        Log.d("Player", "Duration updated from READY state: $duration ms")
+                    }
                 }
 
 
@@ -758,7 +765,7 @@ fun PlayerScreen(
                                 selectedSubtitleIndex = selectedSubtitleIndex,
                                 selectedAudioIndex = selectedAudioIndex
                             )
-                            
+
                         }
                     } else {
                         // 播放结束，发送停止报告
@@ -769,7 +776,7 @@ fun PlayerScreen(
                             selectedSubtitleIndex = selectedSubtitleIndex,
                             selectedAudioIndex = selectedAudioIndex
                         )
-                        
+
                     }
                 }
             }
@@ -784,7 +791,7 @@ fun PlayerScreen(
             override fun onBandwidthSample(
                 elapsedMs: Int,
                 bytesTransferred: Long,
-                bitrateEstimate: Long
+                bitrateEstimate: Long,
             ) {
                 val currentTime = System.currentTimeMillis()
                 if (currentTime - lastSpeedUpdate >= 1000) {
@@ -810,7 +817,7 @@ fun PlayerScreen(
                 selectedSubtitleIndex = selectedSubtitleIndex,
                 selectedAudioIndex = selectedAudioIndex
             )
-            
+
             player.removeListener(listener)
             player.setVideoSurface(null)
             player.release()
@@ -826,290 +833,293 @@ fun PlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .onKeyEvent { event ->
-                // 如果 Resume 按钮正在显示，让按钮处理焦点，不拦截按键
-                if (showResumeButtons && playbackPositionTicks > 0) {
-                    return@onKeyEvent false
-                }
-                
-                if (event.key == Key.DirectionLeft) {
-                    if (event.type == KeyEventType.KeyDown) {
-                        if (leftKeyDownTime == 0L) {
-                            leftKeyDownTime = System.currentTimeMillis()
-                            isShowInfo = true
-                        }
-                    } else if (event.type == KeyEventType.KeyUp) {
-                        if (leftKeyDownTime > 0) {
-                            if (System.currentTimeMillis() - leftKeyDownTime < 500) {
-                                player.seekBack()
-                            }
-                            leftKeyDownTime = 0L
-                        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .onKeyEvent { event ->
+                    // 如果 Resume 按钮正在显示，让按钮处理焦点，不拦截按键
+                    if (showResumeButtons && playbackPositionTicks > 0) {
+                        return@onKeyEvent false
                     }
-                    return@onKeyEvent true
-                }
-                if (event.key == Key.DirectionRight) {
-                    if (event.type == KeyEventType.KeyDown) {
-                        if (rightKeyDownTime == 0L) {
-                            rightKeyDownTime = System.currentTimeMillis()
-                            isShowInfo = true
-                        }
-                    } else if (event.type == KeyEventType.KeyUp) {
-                        if (rightKeyDownTime > 0) {
-                            if (System.currentTimeMillis() - rightKeyDownTime < 500) {
-                                player.seekForward()
-                            }
-                            rightKeyDownTime = 0L
-                        }
-                    }
-                    return@onKeyEvent true
-                }
 
-                if (event.type == KeyEventType.KeyDown) {
-                    if (event.key == Key.DirectionDown || event.key == Key.Menu) {
-                        showMenu = true
-                        return@onKeyEvent true
-                    }
-                    if (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter) {
-                        if (showMenu) return@onKeyEvent false
-                        if (isPlaying) {
-                            player.pause()
-                            isShowInfo = true
-                        } else {
-                            player.play()
-                            isShowInfo = false
+                    if (event.key == Key.DirectionLeft) {
+                        if (event.type == KeyEventType.KeyDown) {
+                            if (leftKeyDownTime == 0L) {
+                                leftKeyDownTime = System.currentTimeMillis()
+                                isShowInfo = true
+                            }
+                        } else if (event.type == KeyEventType.KeyUp) {
+                            if (leftKeyDownTime > 0) {
+                                if (System.currentTimeMillis() - leftKeyDownTime < 500) {
+                                    player.seekBack()
+                                }
+                                leftKeyDownTime = 0L
+                            }
                         }
                         return@onKeyEvent true
                     }
-                    // Show info on any key
-                    isShowInfo = true
-                    // Hide info after delay?
+                    if (event.key == Key.DirectionRight) {
+                        if (event.type == KeyEventType.KeyDown) {
+                            if (rightKeyDownTime == 0L) {
+                                rightKeyDownTime = System.currentTimeMillis()
+                                isShowInfo = true
+                            }
+                        } else if (event.type == KeyEventType.KeyUp) {
+                            if (rightKeyDownTime > 0) {
+                                if (System.currentTimeMillis() - rightKeyDownTime < 500) {
+                                    player.seekForward()
+                                }
+                                rightKeyDownTime = 0L
+                            }
+                        }
+                        return@onKeyEvent true
+                    }
+
+                    if (event.type == KeyEventType.KeyDown) {
+                        if (event.key == Key.DirectionDown || event.key == Key.Menu) {
+                            showMenu = true
+                            return@onKeyEvent true
+                        }
+                        if (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter) {
+                            if (showMenu) return@onKeyEvent false
+                            if (isPlaying) {
+                                player.pause()
+                                isShowInfo = true
+                            } else {
+                                player.play()
+                                isShowInfo = false
+                            }
+                            return@onKeyEvent true
+                        }
+                        // Show info on any key
+                        isShowInfo = true
+                        // Hide info after delay?
+                    }
+                    false
                 }
-                false
-            }
-            .focusRequester(focusRequester)
-            .focusable()
-    ) {
-        // 1. Video Layer
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    this.player = player
-                    useController = false // Use custom overlay
-                    layoutParams = ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                    // --- 核心配置：还原作者原定样式 ---
-                    subtitleView?.apply {
-                        // 1. 允许应用字幕文件内置的样式（颜色、字体、定位等）
-                        setApplyEmbeddedStyles(true)
-
-                        // 2. 允许应用字幕文件内置的字体大小
-                        setApplyEmbeddedFontSizes(true)
-
-                        // 3. 关键：将渲染模式设为 BITMAP（位图模式）
-                        // 只有在这种模式下，复杂的 ASS/SSA 特效和 PGS 图形字幕才能精准还原
-                        // 默认的层次模式（VIEW_TYPE_TEXT）会丢失很多高级特效
-                        // VIEW_TYPE_CANVAS = 2
-                        setViewType(SubtitleView.VIEW_TYPE_CANVAS)
-
-                        // 4. 强制设置透明背景，避免默认样式的黑色背景遮挡
-                        val transparentStyle = CaptionStyleCompat(
-                            android.graphics.Color.WHITE,
-                            android.graphics.Color.TRANSPARENT,
-                            android.graphics.Color.TRANSPARENT,
-                            CaptionStyleCompat.EDGE_TYPE_NONE,
-                            android.graphics.Color.WHITE,
-                            null
+                .focusRequester(focusRequester)
+                .focusable()
+        ) {
+            // 1. Video Layer
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        this.player = player
+                        useController = false // Use custom overlay
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
                         )
-                        setStyle(transparentStyle)
-                    }
-                }
-            },
-            update = { view ->
-                view.player = player
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+                        // --- 核心配置：还原作者原定样式 ---
+                        subtitleView?.apply {
+                            // 1. 允许应用字幕文件内置的样式（颜色、字体、定位等）
+                            setApplyEmbeddedStyles(true)
 
-        // 2. Full Info Overlay Layer (only when isShowInfo)
-        if (isShowInfo && !isPlaying) {
-            PlayerOverlay(
-                mediaInfo = mediaInfo,
-                mediaSource = media.mediaSources?.firstOrNull(),
-                session = session,
-                videoStream = getVideoTrack(media),
-                audioStream = getAudioTrack(media, selectedAudioIndex),
-                position = position,
-                duration = duration,
-                buffered = buffered,
-                isPlaying = isPlaying,
-                player = player,
-                isBuffering = isBuffering,
-                downloadSpeed = downloadSpeed
+                            // 2. 允许应用字幕文件内置的字体大小
+                            setApplyEmbeddedFontSizes(true)
+
+                            // 3. 关键：将渲染模式设为 BITMAP（位图模式）
+                            // 只有在这种模式下，复杂的 ASS/SSA 特效和 PGS 图形字幕才能精准还原
+                            // 默认的层次模式（VIEW_TYPE_TEXT）会丢失很多高级特效
+                            // VIEW_TYPE_CANVAS = 2
+                            setViewType(SubtitleView.VIEW_TYPE_CANVAS)
+
+                            // 4. 强制设置透明背景，避免默认样式的黑色背景遮挡
+                            val transparentStyle = CaptionStyleCompat(
+                                android.graphics.Color.WHITE,
+                                android.graphics.Color.TRANSPARENT,
+                                android.graphics.Color.TRANSPARENT,
+                                CaptionStyleCompat.EDGE_TYPE_NONE,
+                                android.graphics.Color.WHITE,
+                                null
+                            )
+                            setStyle(transparentStyle)
+                        }
+                    }
+                },
+                update = { view ->
+                    view.player = player
+                },
+//                modifier = Modifier.fillMaxSize()
             )
+            
 
-        }
+            // 2. Full Info Overlay Layer (only when isShowInfo)
+            if (isShowInfo && !isPlaying) {
+                PlayerOverlay(
+                    mediaInfo = mediaInfo,
+                    mediaSource = media.mediaSources?.firstOrNull(),
+                    session = session,
+                    videoStream = getVideoTrack(media),
+                    audioStream = getAudioTrack(media, selectedAudioIndex),
+                    position = position,
+                    duration = duration,
+                    buffered = buffered,
+                    isPlaying = isPlaying,
+                    player = player,
+                    isBuffering = isBuffering,
+                    downloadSpeed = downloadSpeed
+                )
 
-        // 3. Simple Pause/Loading Overlay (no info)
-        if ((!isPlaying || isBuffering) && !isShowInfo) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                if (isBuffering) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        CircularProgressIndicator(color = Color.White)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = Utils.formatBandwidth(downloadSpeed),
-                            color = Color.White,
-                            fontSize = 14.sp
-                        )
-                    }
-                } else {
-                    // Play Icon
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Paused",
-                        modifier = Modifier.size(100.dp),
-                        tint = Color.White
-                    )
-                }
             }
 
-            if (!isBuffering) {
-                // Menu Hint at bottom
+            // 3. Simple Pause/Loading Overlay (no info)
+            if ((!isPlaying || isBuffering) && !isShowInfo) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.BottomCenter
+                    contentAlignment = Alignment.Center
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
-                        modifier = Modifier.padding(bottom = 48.dp)
-                    ) {
-
-
-                        Spacer(modifier = Modifier.width(16.dp))
+                    if (isBuffering) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(color = Color.White)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = Utils.formatBandwidth(downloadSpeed),
+                                color = Color.White,
+                                fontSize = 14.sp
+                            )
+                        }
+                    } else {
+                        // Play Icon
                         Icon(
-                            Icons.Default.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = Color.LightGray,
-                            modifier = Modifier.size(16.dp)
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Paused",
+                            modifier = Modifier.size(100.dp),
+                            tint = Color.White
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = stringResource(R.string.press_menu_down_to_show_menu),
-                            color = Color.LightGray,
-                            fontSize = 14.sp
-                        )
+                    }
+                }
+
+                if (!isBuffering) {
+                    // Menu Hint at bottom
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.BottomCenter
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.padding(bottom = 48.dp)
+                        ) {
+
+
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Icon(
+                                Icons.Default.KeyboardArrowDown,
+                                contentDescription = null,
+                                tint = Color.LightGray,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = stringResource(R.string.press_menu_down_to_show_menu),
+                                color = Color.LightGray,
+                                fontSize = 14.sp
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        // 4. Resume Buttons (从头开始 / 继续播放)
-        if (showResumeButtons && playbackPositionTicks > 0) {
-            ResumePlaybackButtons(
-                countdownSeconds = 3,
-                onPlayFromStart = {
-                    showResumeButtons = false
-                    resumeButtonsShownOnce = true
-                    player.seekTo(0)
-                    player.play()
-                },
-                onContinue = {
-                    showResumeButtons = false
-                    resumeButtonsShownOnce = true
-                },
-                onTimeout = {
-                    showResumeButtons = false
-                    resumeButtonsShownOnce = true
-                }
-            )
-        }
+            // 4. Resume Buttons (从头开始 / 继续播放)
+            if (showResumeButtons && playbackPositionTicks > 0) {
+                ResumePlaybackButtons(
+                    countdownSeconds = 3,
+                    onPlayFromStart = {
+                        showResumeButtons = false
+                        resumeButtonsShownOnce = true
+                        player.seekTo(0)
+                        player.play()
+                    },
+                    onContinue = {
+                        showResumeButtons = false
+                        resumeButtonsShownOnce = true
+                    },
+                    onTimeout = {
+                        showResumeButtons = false
+                        resumeButtonsShownOnce = true
+                    }
+                )
+            }
 
-        // 4.5. Skip Intro Button (跳过片头)
-        if (showSkipIntroButton && introEndMs != null && !showResumeButtons) {
-            SkipIntroButton(
-                introEndMs = introEndMs!!,
-                onSkip = {
-                    showSkipIntroButton = false
-                    player.seekTo(introEndMs!!)
-                },
-                onTimeout = {
-                    showSkipIntroButton = false
-                },
-                countdownSeconds = 5
-            )
-        }
+            // 4.5. Skip Intro Button (跳过片头)
+            if (showSkipIntroButton && introEndMs != null && !showResumeButtons) {
+                SkipIntroButton(
+                    introEndMs = introEndMs!!,
+                    onSkip = {
+                        showSkipIntroButton = false
+                        player.seekTo(introEndMs!!)
+                    },
+                    onTimeout = {
+                        showSkipIntroButton = false
+                    },
+                    countdownSeconds = 5
+                )
+            }
 
-        // 5. Menu Dialog
-        if (showMenu) {
-            PlayerMenu(
-                onDismiss = { showMenu = false },
-                media = media,
-                mediaInfo = mediaInfo,
-                subtitleTracks = subtitleTracks,
-                selectedSubtitleIndex = selectedSubtitleIndex,
-                onSubtitleSelect = { index ->
-                    changeTrack(selectedAudioIndex, index)
-                },
-                audioTracks = audioTracks,
-                selectedAudioIndex = selectedAudioIndex,
-                onAudioSelect = { index -> changeTrack(index, selectedSubtitleIndex) },
-                playbackCorrection = playbackCorrection,
-                onPlaybackCorrectionChange = {
-                    // 只对当前播放视频生效，不持久化保存
-                    playbackCorrection = it
-                },
-                playMode = playMode,
-                onPlayModeChange = {
-                    playMode = it
-                    val prefs = context.getSharedPreferences("emby_tv_prefs", Context.MODE_PRIVATE)
-                    prefs.edit().putInt("play_mode", it).apply()
-                },
-                autoSkipIntro = autoSkipIntro,
-                onAutoSkipIntroChange = {
-                    autoSkipIntro = it
-                    preferencesManager.autoSkipIntro = it
-                },
-                isFavorite = isFavorite,
-                onToggleFavorite = {
-                    isFavorite = !isFavorite
-                    if (mediaInfo.id != null) {
-                        scope.launch(Dispatchers.IO) {
-                            try {
-                                if (isFavorite) {
-                                    repository.addToFavorites(mediaInfo.id!!)
-                                } else {
-                                    repository.removeFromFavorites(mediaInfo.id!!)
+            // 5. Menu Dialog
+            if (showMenu) {
+                PlayerMenu(
+                    onDismiss = { showMenu = false },
+                    media = media,
+                    mediaInfo = mediaInfo,
+                    subtitleTracks = subtitleTracks,
+                    selectedSubtitleIndex = selectedSubtitleIndex,
+                    onSubtitleSelect = { index ->
+                        changeTrack(selectedAudioIndex, index)
+                    },
+                    audioTracks = audioTracks,
+                    selectedAudioIndex = selectedAudioIndex,
+                    onAudioSelect = { index -> changeTrack(index, selectedSubtitleIndex) },
+                    playbackCorrection = playbackCorrection,
+                    onPlaybackCorrectionChange = {
+                        // 只对当前播放视频生效，不持久化保存
+                        playbackCorrection = it
+                    },
+                    playMode = playMode,
+                    onPlayModeChange = {
+                        playMode = it
+                        val prefs =
+                            context.getSharedPreferences("emby_tv_prefs", Context.MODE_PRIVATE)
+                        prefs.edit().putInt("play_mode", it).apply()
+                    },
+                    autoSkipIntro = autoSkipIntro,
+                    onAutoSkipIntroChange = {
+                        autoSkipIntro = it
+                        preferencesManager.autoSkipIntro = it
+                    },
+                    isFavorite = isFavorite,
+                    onToggleFavorite = {
+                        isFavorite = !isFavorite
+                        if (mediaInfo.id != null) {
+                            scope.launch(Dispatchers.IO) {
+                                try {
+                                    if (isFavorite) {
+                                        repository.addToFavorites(mediaInfo.id!!)
+                                    } else {
+                                        repository.removeFromFavorites(mediaInfo.id!!)
+                                    }
+                                } catch (e: Exception) {
+                                    ErrorHandler.logError("PlayerScreen", "操作失败", e)
                                 }
-                            } catch (e: Exception) {
-                                ErrorHandler.logError("PlayerScreen", "操作失败", e)
                             }
                         }
-                    }
-                },
-                serverUrl = serverUrl,
-                repository = repository,
-                onNavigateToPlayer = onNavigateToPlayer
-            )
-        }
+                    },
+                    serverUrl = serverUrl,
+                    repository = repository,
+                    onNavigateToPlayer = onNavigateToPlayer
+                )
+            }
 
-        LaunchedEffect(Unit) {
-            focusRequester.requestFocus()
+            LaunchedEffect(Unit) {
+                focusRequester.requestFocus()
+            }
         }
-    }
     } // 最外层纯黑背景 Box 闭合
 }
 

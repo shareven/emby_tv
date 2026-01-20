@@ -27,6 +27,7 @@ import com.xxxx.emby_tv.ui.components.TopStatusBar
 import com.xxxx.emby_tv.ui.viewmodel.HomeViewModel
 import com.xxxx.emby_tv.ui.viewmodel.MainViewModel
 
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -234,6 +235,10 @@ private fun MediaSection(
     } else {
         (maxLength.value * maxAspectRatio).dp
     }
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
 
     Column {
         Text(
@@ -255,22 +260,14 @@ private fun MediaSection(
                     items,
                     key = { _, item -> item.id ?: item.hashCode() }
                 ) { index, item ->
-                    val focusRequester = remember { FocusRequester() }
-                    val modifier = if ((isContinueWatching || isMyLibrary) && index == 0) {
+
+                    val modifier = if ((isContinueWatching) && index == 0) {
                         Modifier.focusRequester(focusRequester)
                     } else {
                         Modifier
                     }
 
-                    if (isContinueWatching && index == 0) {
-                        LaunchedEffect(Unit) {
-                            focusRequester.requestFocus()
-                        }
-                    } else if (isMyLibrary && index == 0) {
-                        LaunchedEffect(Unit) {
-                            focusRequester.requestFocus()
-                        }
-                    }
+
 
                     BuildItem(
                         modifier = modifier,
