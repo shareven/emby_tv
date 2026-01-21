@@ -704,11 +704,10 @@ object EmbyApi {
             val videoCodecs = capabilities.videoCodecs.toMutableList()
             val audioCodecs = capabilities.audioCodecs.toMutableList()
             val videoProfiles = capabilities.videoProfiles
-
             val hardwareSupportsHevc = videoCodecs.any { codec ->
                 listOf("hevc", "h265", "hevc10").any { it.equals(codec, ignoreCase = true) }
             }
-
+            // ErrorHandler.logError("audioCodecs",audioCodecs.joinToString(","))
             var actualDisableHevc = disableHevc
             if (!hardwareSupportsHevc) {
                 actualDisableHevc = true
@@ -730,14 +729,17 @@ object EmbyApi {
                 add("DirectPlayProfiles", JsonArray().apply {
                     add(JsonObject().apply {
                         addProperty("Type", "Video")
-                        addProperty("VideoCodec", if (actualDisableHevc) "h264" else supportedVideo)
-                        addProperty("Container", "mp4,m4v,mkv,mov")
-                        addProperty("AudioCodec", supportedAudio)
+                        // addProperty("VideoCodec", null as String?)
+                        // addProperty("Container", null as String?)
+                        // addProperty("AudioCodec", supportedAudio)
+                       addProperty("VideoCodec", if (actualDisableHevc) "h264" else supportedVideo)
+                       addProperty("Container", "mp4,m4v,mkv,mov")
+                       addProperty("AudioCodec", supportedAudio)
                     })
                     add(JsonObject().apply {
                         addProperty("Type", "Audio")
-                        addProperty("Container", null as String?)
-                        addProperty("AudioCodec", null as String?)
+                       addProperty("Container", null as String?)
+                       addProperty("AudioCodec", null as String?)
                     })
                 })
 
@@ -940,6 +942,7 @@ object EmbyApi {
         val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
         for (info in codecList.codecInfos) {
             if (info.isEncoder) continue
+            // ErrorHandler.logError("supportedTypes",info.supportedTypes.joinToString(","))
 
             for (type in info.supportedTypes) {
                 try {
@@ -956,6 +959,7 @@ object EmbyApi {
                             videoCodecs.add("h265")
                         }
                         type.equals("video/av01", ignoreCase = true) -> videoCodecs.add("av1")
+                        type.equals("video/x-vnd.on2.vp8", ignoreCase = true) -> videoCodecs.add("vp8")
                         type.equals("video/x-vnd.on2.vp9", ignoreCase = true) -> videoCodecs.add("vp9")
                         type.equals("audio/mp4a-latm", ignoreCase = true) -> audioCodecs.add("aac")
                         type.equals("audio/ac3", ignoreCase = true) -> audioCodecs.add("ac3")
@@ -972,6 +976,7 @@ object EmbyApi {
                         type.equals("audio/eac3-joc", true) -> audioCodecs.add("eac3")
                         type.equals("audio/ac4", true) -> audioCodecs.add("ac4")
                     }
+                    // audioCodecs.add("truehd")
                 } catch (e: Exception) {
                     continue
                 }

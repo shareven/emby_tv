@@ -95,6 +95,8 @@ fun BuildItem(
 
         modifier = modifier
             .width(imgWidth)
+            //兼容移动端点击  TODO：移除
+            .clickable(interactionSource = null, onClick = onItemClick)
             .wrapContentHeight()
             .onKeyEvent { keyEvent ->
                 if (onMenuClick != null && keyEvent.type == KeyEventType.KeyDown) {

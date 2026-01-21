@@ -12,6 +12,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -837,6 +838,15 @@ fun PlayerScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black)
+                .clickable(enabled = true, onClick = {
+                    if (isPlaying) {
+                        player.pause()
+                        isShowInfo = true
+                    } else {
+                        player.play()
+                        isShowInfo = false
+                    }
+                })
                 .onKeyEvent { event ->
                     // 如果 Resume 按钮正在显示，让按钮处理焦点，不拦截按键
                     if (showResumeButtons && playbackPositionTicks > 0) {
@@ -944,7 +954,7 @@ fun PlayerScreen(
                 },
 //                modifier = Modifier.fillMaxSize()
             )
-            
+
 
             // 2. Full Info Overlay Layer (only when isShowInfo)
             if (isShowInfo && !isPlaying) {

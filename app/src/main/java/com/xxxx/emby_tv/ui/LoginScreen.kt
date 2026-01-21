@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -160,6 +161,28 @@ fun LoginScreen(
         }
     }
 
+    fun onLoginClick(){
+        val builtServerUrl = buildServerUrl(protocol, host, port)
+        serverUrl = builtServerUrl
+        loginViewModel.login(
+            serverUrl = builtServerUrl,
+            username = username,
+            password = password,
+            onSuccess = {
+                localServer?.stop()
+            },
+            onError = { error ->
+                scope.launch {
+                    android.widget.Toast.makeText(
+                        context.applicationContext,
+                        failText,
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        )
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         // 顶部状态栏
         TopStatusBar(
@@ -283,31 +306,13 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(32.dp))
 
                 Button(
-                    onClick = {
-                        val builtServerUrl = buildServerUrl(protocol, host, port)
-                        serverUrl = builtServerUrl
-                        loginViewModel.login(
-                            serverUrl = builtServerUrl,
-                            username = username,
-                            password = password,
-                            onSuccess = {
-                                localServer?.stop()
-                            },
-                            onError = { error ->
-                                scope.launch {
-                                    android.widget.Toast.makeText(
-                                        context.applicationContext,
-                                        failText,
-                                        android.widget.Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            }
-                        )
-                    },
+                    onClick = { onLoginClick() },
                     enabled = !loginViewModel.isLoading,
                     modifier = Modifier
                         .fillMaxWidth(0.8f)
                         .height(56.dp)
+                        //兼容移动端点击  TODO：移除
+                        // .clickable(true, onClick = { onLoginClick() })
                         .focusRequester(loginButtonFocusRequester)
                         .onKeyEvent { keyEvent ->
                             if (keyEvent.type == KeyEventType.KeyDown) {

@@ -32,12 +32,12 @@ fun LibraryScreen(
     title: String,
     type: String,
     libraryViewModel: LibraryViewModel,
-    onNavigateToSeries: (String) -> Unit
+    onNavigateToSeries: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val firstItemFocusRequester = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
-    
+
     // 获取 serverUrl
     val repository = remember { EmbyRepository.getInstance(context) }
     val serverUrl = repository.serverUrl ?: ""
@@ -54,11 +54,11 @@ fun LibraryScreen(
     }
 
     // 数据加载完成后聚焦到第一个项目
-   LaunchedEffect(libraryItems) {
-       if (libraryItems != null && libraryItems.isNotEmpty()) {
-           firstItemFocusRequester.requestFocus()
-       }
-   }
+    LaunchedEffect(libraryItems) {
+        if (libraryItems != null && libraryItems.isNotEmpty()) {
+            firstItemFocusRequester.requestFocus()
+        }
+    }
 
     // 监听滚动位置，接近底部时加载更多
     LaunchedEffect(gridState) {
@@ -66,7 +66,7 @@ fun LibraryScreen(
             val layoutInfo = gridState.layoutInfo
             val totalItemsCount = layoutInfo.totalItemsCount
             val lastVisibleItemIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            
+
             // 当最后可见项距离末尾小于 5 个时触发加载
             totalItemsCount > 0 && lastVisibleItemIndex >= totalItemsCount - 5
         }.collect { shouldLoadMore ->
@@ -94,7 +94,7 @@ fun LibraryScreen(
                 style = MaterialTheme.typography.headlineSmall,
                 color = Color.White
             )
-            
+
             // 显示加载数量
             if (libraryItems != null && totalCount > 0) {
                 Text(
@@ -111,20 +111,37 @@ fun LibraryScreen(
             val items = libraryItems
 
             // 计算宽高
+            // 1. 定义基准长度
             val maxLength = 220.dp
-            val maxAspectRatio = libraryItems.mapNotNull {
-                val ratio = it.primaryImageAspectRatio?.toFloat()
-                if (ratio == null || ratio == 1.0f) null else ratio
-            }.maxOrNull() ?: 0.666f
 
-            val imgWidth = if (maxAspectRatio >= 1f) {
+            // 2. 提取并过滤有效比例，同时拆分
+            val (aspectRatioOver1List, aspectRatioUnder1List) = items
+                .mapNotNull { it.primaryImageAspectRatio?.toFloat() } // 确保转为 Float 且过滤 null
+                .partition { it > 1.0f }
+
+            // 3. 计算目标比例 (增加对空列表的防御性保护)
+            val maxAspectRatio = if (aspectRatioOver1List.size >= aspectRatioUnder1List.size) {
+                // 横版（如 16:9）居多，取横版中的最大比例（最宽的那张）
+                aspectRatioOver1List.maxOrNull() ?: 1.777f
+            } else {
+                // 竖版（如 2:3）居多，取竖版中的最大比例（最接近正方形的那张）
+                // 注意：如果是竖版，max() 实际上是让画面不那么“窄”
+                aspectRatioUnder1List.maxOrNull() ?: 0.666f
+            }
+
+            // 4. 计算图片宽度 (使用 Compose 的 Dp 乘法)
+            // 逻辑：如果是横版，宽度固定为 maxLength；如果是竖版，按比例缩减宽度
+            val imgWidth = if (maxAspectRatio >= 1.0f) {
                 maxLength
             } else {
-                (maxLength.value * maxAspectRatio).dp
+                // 修正：直接用 Dp 乘 Float，比取 .value 更安全
+                maxLength * maxAspectRatio
             }
-            
-            val num = if (maxAspectRatio > 1) 4 else 6
-            
+
+            // 5. 计算单行显示数量
+            val num = if (maxAspectRatio > 1.0f) 4 else 6
+
+
             LazyVerticalGrid(
                 columns = GridCells.Fixed(num),
                 state = gridState,
@@ -139,7 +156,9 @@ fun LibraryScreen(
                     val id = item.id ?: ""
                     if (id.isNotEmpty()) {
                         val itemModifier = if (index == 0) {
-                            Modifier.fillMaxWidth().focusRequester(firstItemFocusRequester)
+                            Modifier
+                                .fillMaxWidth()
+                                .focusRequester(firstItemFocusRequester)
                         } else {
                             Modifier.fillMaxWidth()
                         }
@@ -160,7 +179,7 @@ fun LibraryScreen(
                         }
                     }
                 }
-                
+
                 // 加载更多指示器
                 if (isLoadingMore) {
                     item {
