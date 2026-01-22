@@ -166,4 +166,5 @@
     <string name="all_accounts">All</string>
     <string name="searching">Searching</string>
     <string name="filtered">(Filtered)</string>
+    <string name="dolby_vision_profiles">Supported DV: %1$s</string>
 </resources>

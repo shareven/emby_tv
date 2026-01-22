@@ -1,5 +1,6 @@
 package com.xxxx.emby_tv.ui
 
+import MyRenderersFactory
 import android.content.Context
 import android.net.Uri
 import android.os.Handler
@@ -61,6 +62,8 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.upstream.BandwidthMeter
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
@@ -170,6 +173,9 @@ fun PlayerScreen(
     var autoSkipIntro by remember { mutableStateOf(preferencesManager.autoSkipIntro) }
     var hasAutoSkipped by remember { mutableStateOf(false) }
 
+    // 收集设备支持的杜比视界profile
+    val supportedDvProfiles by playerViewModel.supportedDvProfiles.collectAsState()
+
 
     val playbackInfoFailText = stringResource(R.string.failed_get_playback_info)
     var playbackTrigger by remember { mutableStateOf(0) }
@@ -188,8 +194,8 @@ fun PlayerScreen(
         // 逻辑：ExoPlayer 会先扫描系统 MediaCodecList。
         // 1. 如果电视硬件报支持该 Codec，优先用硬解。
         // 2. 如果电视硬件不支持（如 TrueHD/DTS），则自动切换到你的 FFmpeg 扩展。
-//        setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
-        setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+        setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+//        setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
 
         // 这确保了渲染器能够处理复杂的字幕样式
         setEnableDecoderFallback(true)
@@ -434,7 +440,7 @@ fun PlayerScreen(
 
             val source = mediaResult.mediaSources.firstOrNull()
             val streams = source?.mediaStreams ?: emptyList()
-
+ErrorHandler.logError("level", streams.firstOrNull()?.level.toString(), null)
             // 检测片头信息
             val introRange = IntroSkipHelper.detectIntroRange(source?.chapters)
             if (introRange != null) {
@@ -988,7 +994,7 @@ fun PlayerScreen(
 
 
             // 2. Full Info Overlay Layer (only when isShowInfo)
-            if (isShowInfo && !isPlaying) {
+            if (!isShowInfo && !isPlaying) {
                 PlayerOverlay(
                     mediaInfo = mediaInfo,
                     mediaSource = media.mediaSources?.firstOrNull(),
@@ -1001,7 +1007,8 @@ fun PlayerScreen(
                     isPlaying = isPlaying,
                     player = player,
                     isBuffering = isBuffering,
-                    downloadSpeed = downloadSpeed
+                    downloadSpeed = downloadSpeed,
+                    supportedDvProfiles = supportedDvProfiles
                 )
 
             }

@@ -166,4 +166,5 @@
     <string name="all_accounts">全部</string>
     <string name="searching">正在搜索</string>
     <string name="filtered">(已过滤)</string>
+    <string name="dolby_vision_profiles">支持杜比视界: %1$s</string>
 </resources>

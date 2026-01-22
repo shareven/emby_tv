@@ -1005,7 +1005,8 @@ object EmbyApi {
                         type.equals("audio/eac3-joc", true) -> audioCodecs.add("eac3")
                         type.equals("audio/ac4", true) -> audioCodecs.add("ac4")
                     }
-                    audioCodecs.addAll(listOf("truehd","mlp","dca","ac3","eac3","ape","alac"))
+                    audioCodecs.addAll(listOf("flac", "alac", "pcm_mulaw", "pcm_alaw", "mp3", "aac", "ac3", "eac3", "dca", "mlp", "truehd"))
+                    // audioCodecs.addAll(listOf("truehd","mlp","dca","ac3","eac3","ape","alac"))
 
 //                     audioCodecs.add("truehd")
                 } catch (e: Exception) {

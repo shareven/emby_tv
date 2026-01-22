@@ -53,7 +53,10 @@ data class MediaStreamDto(
     @SerializedName("IsTextSubtitleStream") val isTextSubtitleStream: Boolean? = null,
     @SerializedName("SupportsExternalStream") val supportsExternalStream: Boolean? = null,
     @SerializedName("Path") val path: String? = null,
+    @SerializedName("ExtendedVideoSubType") val extendedVideoSubType: String? = null,
+    @SerializedName("ExtendedVideoSubTypeDescription") val extendedVideoSubTypeDescription: String? = null,
+    @SerializedName("ExtendedVideoType") val extendedVideoType: String? = null,
     @SerializedName("PixelFormat") val pixelFormat: String? = null,
-    @SerializedName("Level") val level: Double? = null,
+    @SerializedName("Level") val level: Int? = null,
     @SerializedName("IsAnamorphic") val isAnamorphic: Boolean? = null
 )

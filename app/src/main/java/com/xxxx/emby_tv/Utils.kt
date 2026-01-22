@@ -1,12 +1,12 @@
 package com.xxxx.emby_tv
 
-import android.annotation.SuppressLint
 import android.content.Context
+import android.media.MediaCodecInfo
 import com.google.gson.Gson
-import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.xxxx.emby_tv.data.model.BaseItemDto
 import com.xxxx.emby_tv.data.model.MediaDto
+import android.media.MediaCodecList
 
 object Utils {
     val gson = Gson()
@@ -36,7 +36,8 @@ object Utils {
 
         // 默认返回主封面图 (Primary)
         val primaryTag = imageTags?.get("Primary") ?: item.parentPrimaryImageTag
-        val primaryId = if (imageTags?.containsKey("Primary") == true) itemId else item.parentPrimaryImageItemId
+        val primaryId =
+            if (imageTags?.containsKey("Primary") == true) itemId else item.parentPrimaryImageItemId
 
         if (!primaryTag.isNullOrEmpty() && !primaryId.isNullOrEmpty()) {
             return "$serverUrl/emby/Items/$primaryId/Images/Primary?maxWidth=500&tag=$primaryTag&quality=80"
@@ -78,7 +79,7 @@ object Utils {
      */
     fun determinePlayMethod(media: MediaDto): String {
         val source = media.mediaSources?.firstOrNull() ?: return "Transcode"
-        
+
         return when {
             source.supportsDirectPlay == true -> "DirectPlay"
             source.supportsDirectStream == true -> "DirectStream"
@@ -120,7 +121,7 @@ object Utils {
         return "%.1f Mbps".format(mbps)
     }
 
-    fun formatKbps(bps:Int?): String {
+    fun formatKbps(bps: Int?): String {
         val b = bps ?: 0
         if (b <= 0) return ""
         val kbps = b / 1000
@@ -149,7 +150,7 @@ object Utils {
     /**
      * 将 Emby ticks 转换为毫秒
      * Emby 使用 10000 ticks = 1ms 的转换比例
-     * 
+     *
      * @param ticks Emby ticks 值
      * @return 毫秒值
      */
@@ -180,3 +181,79 @@ fun JsonObject.safeGetString(key: String): String? {
     }
 }
 
+
+data class DvProfileInfo(
+    val profileInt: Int,
+    val profileName: String,
+    val levelInt: Int,
+    val maxSupportedLevel: String,
+)
+
+fun getSupportedDolbyVisionProfiles(): List<DvProfileInfo> {
+    val profileList = mutableListOf<DvProfileInfo>()
+
+    // 获取所有支持解码的媒体库列表
+    val codecList = MediaCodecList(MediaCodecList.ALL_CODECS)
+    val codecInfos = codecList.codecInfos
+
+    for (info in codecInfos) {
+        // 排除编码器，只看解码器
+        if (info.isEncoder) continue
+
+        val types = info.supportedTypes
+        for (type in types) {
+            // 匹配杜比视界的 MIME 类型
+            if (type.equals("video/dolby-vision", ignoreCase = true)) {
+                val capabilities = info.getCapabilitiesForType(type)
+                val profileLevels = capabilities.profileLevels
+
+                for (pl in profileLevels) {
+                    val name = mapDvProfileToName(pl.profile)
+                    val level = mapDvLevelToName(pl.level)
+
+                    // 避免重复添加
+                    if (profileList.none { it.profileInt == pl.profile }) {
+                        profileList.add(DvProfileInfo(pl.profile, name, pl.level, level))
+                    }
+                }
+            }
+        }
+    }
+    return profileList.sortedBy { it.profileInt }
+}
+
+// 映射 Profile 数值为可读名称
+private fun mapDvProfileToName(profile: Int): String {
+    return when (profile) {
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvavPen -> "P1 (AVC/Enh)"
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvavSe -> "P9 (SDR/Comp)" // 部分版本映射 P9
+
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvheDer -> "P2 (HEVC/Base)"
+
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvheDen -> "P3 (HEVC/Enh)"
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvheDtr -> "P7 (UHD Blue)" // 你 蓝光 原盘用的
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvheStn -> "P8 (HDR10/Comp)" // 兼容性最强
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvheDth -> "P5 (OTT/Std)"  // 流媒体最常用
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvheDtb -> "P6 (Legacy/DL)"
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvheSt -> "P4 (Legacy/ST)"
+
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvav110 -> "P10 (AV1/Next)" // 2026年开始流行的 AV1 杜比
+
+        else -> "P$profile (UNK)"
+    }
+}
+
+// 映射 Level 数值为可读名称
+private fun mapDvLevelToName(level: Int): String {
+    return when (level) {
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionLevelFhd24 -> "FHD 24fps"
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionLevelFhd30 -> "FHD 30fps"
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionLevelFhd60 -> "FHD 60fps"
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionLevelUhd24 -> "4K 24fps"
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionLevelUhd30 -> "4K 30fps"
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionLevelUhd48 -> "4K 48fps"
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionLevelUhd60 -> "4K 60fps"
+        MediaCodecInfo.CodecProfileLevel.DolbyVisionLevelUhd120 -> "4K 120fps"
+        else -> "Level $level"
+    }
+}

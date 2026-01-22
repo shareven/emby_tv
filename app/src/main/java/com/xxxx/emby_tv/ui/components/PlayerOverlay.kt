@@ -63,6 +63,7 @@ import com.xxxx.emby_tv.data.model.MediaSourceInfoDto
 import com.xxxx.emby_tv.data.model.MediaStreamDto
 import com.xxxx.emby_tv.data.model.SessionDto
 import com.xxxx.emby_tv.ui.components.PlayerMenu
+import com.xxxx.emby_tv.DvProfileInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -83,6 +84,7 @@ fun PlayerOverlay(
     player: ExoPlayer,
     isBuffering: Boolean,
     downloadSpeed: Long = 0,
+    supportedDvProfiles: List<DvProfileInfo> = emptyList(),
 ) {
     Box(
         modifier = Modifier
@@ -147,7 +149,7 @@ fun PlayerOverlay(
                 fontSize = 12.sp
             )
             Text(
-                text = getVideoDetailLine(videoStream, mediaSource),
+                text = getVideoDetailLine(videoStream, mediaSource, supportedDvProfiles),
                 color = Color.White,
                 fontSize = 12.sp
             )
@@ -390,22 +392,28 @@ fun getVideoMainLine(
 }
 
 @Composable
-fun getVideoDetailLine(videoStream: MediaStreamDto?, mediaSource: MediaSourceInfoDto?): String {
+fun getVideoDetailLine(videoStream: MediaStreamDto?, mediaSource: MediaSourceInfoDto?, supportedDvProfiles: List<DvProfileInfo>): String {
     if (videoStream == null && mediaSource == null) return ""
     val profile = (videoStream?.profile ?: "")
     val levelVal = (videoStream?.level)
     val level = if (levelVal != null && levelVal > 0) levelVal.toString() else ""
 
     val fpsVal =
-        (videoStream?.averageFrameRate)?.toString() ?: (videoStream?.realFrameRate)?.toString()
-    val fps = if (!fpsVal.isNullOrEmpty()) "$fpsVal ${stringResource(R.string.fps_suffix)}" else ""
+        (videoStream?.averageFrameRate)?.toInt() ?: (videoStream?.realFrameRate)?.toInt()?:0
+    val fps = if (fpsVal!=0) "$fpsVal ${stringResource(R.string.fps_suffix)}" else ""
 
     val bitrateVal = videoStream?.bitRate ?: mediaSource?.bitrate ?: mediaSource?.transcodingBitrate
     val bitrateStr = formatMbps(bitrateVal)
 
+    val dolbyVisionProfile= if(videoStream?.extendedVideoType=="DolbyVision") {
+        val profileNames = supportedDvProfiles.joinToString(", ") { it.profileName }
+        stringResource(R.string.dolby_vision_profiles, profileNames)
+    } else ""
+
     return listOfNotNull(
         profile.takeIf { it.isNotEmpty() },
         level.takeIf { it.isNotEmpty() },
+        dolbyVisionProfile.takeIf { it.isNotEmpty() },
         bitrateStr.takeIf { it.isNotEmpty() },
         fps.takeIf { it.isNotEmpty() }).joinToString(" ")
 }

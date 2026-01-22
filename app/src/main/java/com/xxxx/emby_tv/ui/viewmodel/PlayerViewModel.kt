@@ -6,17 +6,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.xxxx.emby_tv.DvProfileInfo
 import com.xxxx.emby_tv.Utils
 import com.xxxx.emby_tv.data.repository.EmbyRepository
 import com.xxxx.emby_tv.data.model.MediaDto
 import com.xxxx.emby_tv.data.model.MediaSourceInfoDto
 import com.xxxx.emby_tv.data.model.MediaStreamDto
+import com.xxxx.emby_tv.getSupportedDolbyVisionProfiles
 import com.xxxx.emby_tv.util.ErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+// 定义一个全局的静态变量作为内存缓存
+private var cachedDvProfiles: List<DvProfileInfo>? = null
 /**
  * 播放器 ViewModel
  * 
@@ -60,6 +66,20 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     // === 当前播放的媒体 ID ===
     var currentMediaId: String = ""
         private set
+
+
+    private val _supportedDvProfiles = MutableStateFlow<List<DvProfileInfo>>(cachedDvProfiles ?: emptyList())
+    val supportedDvProfiles = _supportedDvProfiles.asStateFlow()
+
+    init {
+        if (cachedDvProfiles == null) {
+            viewModelScope.launch(Dispatchers.Default) {
+                val result = getSupportedDolbyVisionProfiles()
+                cachedDvProfiles = result
+                _supportedDvProfiles.value = result
+            }
+        }
+    }
 
     /**
      * 加载播放信息
