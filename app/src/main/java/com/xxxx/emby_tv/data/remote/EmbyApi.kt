@@ -33,9 +33,9 @@ import com.google.net.cronet.okhttptransport.CronetTimeoutException
  */
 object EmbyApi {
     private const val TAG = "EmbyApi"
-    private const val CLIENT = "shareven/emby_tv"
-    private val CLIENT_VERSION: String = BuildConfig.VERSION_NAME
-    private const val DEVICE_NAME = "Android TV"
+    const val CLIENT = "shareven/emby_tv"
+    val CLIENT_VERSION: String = BuildConfig.VERSION_NAME
+    const val DEVICE_NAME = "Android TV"
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
     private val gson = Gson()
@@ -734,7 +734,8 @@ object EmbyApi {
                         // addProperty("AudioCodec", supportedAudio)
                        addProperty("VideoCodec", if (actualDisableHevc) "h264" else supportedVideo)
                        addProperty("Container", "mp4,m4v,mkv,mov")
-                       addProperty("AudioCodec", supportedAudio)
+                    //    addProperty("AudioCodec", null as String?)
+                      addProperty("AudioCodec", supportedAudio)
                     })
                     add(JsonObject().apply {
                         addProperty("Type", "Audio")
@@ -800,10 +801,21 @@ object EmbyApi {
                 add("ContainerProfiles", JsonArray())
 
                 add("CodecProfiles", JsonArray().apply {
+                    // 1. 声明高级音频支持，并解除声道限制（针对 7.1 声道原盘）
+                    add(createCodecProfileAudio("truehd", maxChannels = 8))
+                    add(createCodecProfileAudio("mlp", maxChannels = 8))
+                    add(createCodecProfileAudio("dca", maxChannels = 8)) // DTS / DTS-HD / DTS:X
+                    add(createCodecProfileAudio("dts", maxChannels = 8))
+                    add(createCodecProfileAudio("ac3", maxChannels = 6))
+                    add(createCodecProfileAudio("eac3", maxChannels = 8))
+
+                    // 2. 基础音频支持
                     add(createCodecProfileAudio("aac"))
                     add(createCodecProfileAudio("flac"))
                     add(createCodecProfileAudio("vorbis"))
-                    add(createCodecProfileAudio(null))
+                    add(createCodecProfileAudio("mp3"))
+                    add(createCodecProfileAudio("alac"))
+                    add(createCodecProfileAudio("ape"))
 
                     add(JsonObject().apply {
                         addProperty("Type", "Video")
@@ -894,13 +906,25 @@ object EmbyApi {
         }
     }
 
-    private fun createCodecProfileAudio(codec: String?): JsonObject {
+    private fun createCodecProfileAudio(codec: String?, maxChannels: Int = 8): JsonObject {
         return JsonObject().apply {
-            addProperty("Type", "VideoAudio")
+            // 1. 修改为 "Audio"，这是 Emby 处理音频能力的标准字段
+            addProperty("Type", "Audio")
+
             if (codec != null) {
                 addProperty("Codec", codec)
             }
+
             add("Conditions", JsonArray().apply {
+                // 2. 核心：声明支持的最大声道数（解决原盘 7.1 降混问题）
+                add(JsonObject().apply {
+                    addProperty("Condition", "LessThanEqual")
+                    addProperty("Property", "AudioChannels")
+                    addProperty("Value", maxChannels.toString())
+                    addProperty("IsRequired", "false")
+                })
+
+                // 3. 保留原有的非次要音频判断
                 add(JsonObject().apply {
                     addProperty("Condition", "Equals")
                     addProperty("Property", "IsSecondaryAudio")
@@ -910,6 +934,7 @@ object EmbyApi {
             })
         }
     }
+
 
     private fun createSubtitleProfile(
         format: String,
@@ -939,10 +964,14 @@ object EmbyApi {
         val audioCodecs = mutableSetOf<String>()
         val videoProfiles = mutableListOf<VideoProfile>()
 
+        //添加ffmpeg支持的类型
         val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
-        for (info in codecList.codecInfos) {
+        val codecListAll = MediaCodecList(MediaCodecList.ALL_CODECS)
+        ErrorHandler.logError("codecList",codecList.codecInfos.size.toString())
+        ErrorHandler.logError("codecListAll",codecListAll.codecInfos.size.toString())
+        for (info in codecListAll.codecInfos) {
             if (info.isEncoder) continue
-            // ErrorHandler.logError("supportedTypes",info.supportedTypes.joinToString(","))
+             ErrorHandler.logError("supportedTypes",info.supportedTypes.joinToString(","))
 
             for (type in info.supportedTypes) {
                 try {
@@ -962,8 +991,8 @@ object EmbyApi {
                         type.equals("video/x-vnd.on2.vp8", ignoreCase = true) -> videoCodecs.add("vp8")
                         type.equals("video/x-vnd.on2.vp9", ignoreCase = true) -> videoCodecs.add("vp9")
                         type.equals("audio/mp4a-latm", ignoreCase = true) -> audioCodecs.add("aac")
-                        type.equals("audio/ac3", ignoreCase = true) -> audioCodecs.add("ac3")
-                        type.equals("audio/eac3", ignoreCase = true) -> audioCodecs.add("eac3")
+//                        type.equals("audio/ac3", ignoreCase = true) -> audioCodecs.add("ac3")
+//                        type.equals("audio/eac3", ignoreCase = true) -> audioCodecs.add("eac3")
                         type.equals("audio/mpeg", ignoreCase = true) -> audioCodecs.add("mp3")
                         type.equals("audio/flac", ignoreCase = true) -> audioCodecs.add("flac")
                         type.equals("audio/opus", ignoreCase = true) -> audioCodecs.add("opus")
@@ -972,11 +1001,13 @@ object EmbyApi {
                             audioCodecs.add("dts")
                             audioCodecs.add("dtshd")
                         }
-                        type.equals("audio/true-hd", true) -> audioCodecs.add("truehd")
+//                        type.equals("audio/true-hd", true) -> audioCodecs.add("truehd")
                         type.equals("audio/eac3-joc", true) -> audioCodecs.add("eac3")
                         type.equals("audio/ac4", true) -> audioCodecs.add("ac4")
                     }
-                    // audioCodecs.add("truehd")
+                    audioCodecs.addAll(listOf("truehd","mlp","dca","ac3","eac3","ape","alac"))
+
+//                     audioCodecs.add("truehd")
                 } catch (e: Exception) {
                     continue
                 }

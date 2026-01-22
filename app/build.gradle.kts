@@ -28,7 +28,7 @@ android {
         targetSdk = 36
         versionName = "2.0.7"
         // versionCode = 207
-        versionCode = 48
+        versionCode = 50
 
     }
 
@@ -89,14 +89,18 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
     implementation("androidx.media3:media3-exoplayer-rtsp:$media3Version")
     // 增加 extractor 以增强对 MKV 内置字幕(ASS/SSA/PGS)的解析能力
-    implementation("androidx.media3:media3-extractor:$media3Version")
+//    implementation("androidx.media3:media3-extractor:$media3Version")
+    implementation("androidx.media3:media3-datasource-okhttp:$media3Version")
+
+    // 引用你刚才在 settings 里定义的本地模块
+    implementation(project(":decoder_ffmpeg"))
 
     // 4. 图片加载 (使用 Coil 3)
     implementation("io.coil-kt.coil3:coil-compose:3.0.4")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
 
     // Cronet
-    implementation("org.chromium.net:cronet-embedded:119.6045.31")
+    implementation("org.chromium.net:cronet-embedded:143.7445.0")
     implementation("com.google.net.cronet:cronet-okhttp:0.1.0")
 
     // App Update

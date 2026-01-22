@@ -58,10 +58,14 @@ import androidx.media3.ui.PlayerView
 import androidx.compose.ui.res.stringResource
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.upstream.BandwidthMeter
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
@@ -89,6 +93,10 @@ import com.xxxx.emby_tv.ui.viewmodel.PlayerViewModel
 import com.xxxx.emby_tv.util.ErrorHandler
 import com.xxxx.emby_tv.util.IntroSkipHelper
 import com.xxxx.emby_tv.data.local.PreferencesManager
+import com.xxxx.emby_tv.data.remote.EmbyApi
+import com.xxxx.emby_tv.data.remote.EmbyApi.CLIENT_VERSION
+import com.xxxx.emby_tv.data.remote.EmbyApi.DEVICE_NAME
+import com.xxxx.emby_tv.data.remote.HttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -177,7 +185,13 @@ fun PlayerScreen(
     }
 
     val renderersFactory = DefaultRenderersFactory(context).apply {
-        // 在 1.5.1 中，这确保了渲染器能够处理复杂的字幕样式
+        // 逻辑：ExoPlayer 会先扫描系统 MediaCodecList。
+        // 1. 如果电视硬件报支持该 Codec，优先用硬解。
+        // 2. 如果电视硬件不支持（如 TrueHD/DTS），则自动切换到你的 FFmpeg 扩展。
+//        setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+        setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+
+        // 这确保了渲染器能够处理复杂的字幕样式
         setEnableDecoderFallback(true)
     }
 
@@ -199,9 +213,25 @@ fun PlayerScreen(
         DefaultBandwidthMeter.getSingletonInstance(context)
     }
 
+    val okHttpClient = HttpClient.getClient(context)
+
+// 创建支持 OkHttp 的工厂
+    val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
+        .setUserAgent(EmbyApi.CLIENT+"/"+CLIENT_VERSION)
+        // 这里可以添加 Emby 必须的通用 Header
+        .setDefaultRequestProperties(mapOf(
+            "X-Emby-Client" to EmbyApi.CLIENT,
+            "X-Emby-Client-Version" to CLIENT_VERSION,
+            "X-Emby-Device-Name" to EmbyApi.DEVICE_NAME,
+        ))
+
+    val mediaSourceFactory = DefaultMediaSourceFactory(context)
+        .setDataSourceFactory(dataSourceFactory)
+
     // ExoPlayer
     val player = remember {
         ExoPlayer.Builder(context, renderersFactory)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setTrackSelector(trackSelector)
             .setLoadControl(loadControl)
             .setSeekBackIncrementMs(10000)
@@ -327,6 +357,7 @@ fun PlayerScreen(
                             .build()
 
                         player.setMediaItem(mediaItem, position)
+                        Log.e("FFmpegCheck", "FFmpeg Library Available: ${androidx.media3.decoder.ffmpeg.FfmpegLibrary.isAvailable()}")
                         player.prepare()
                         player.playWhenReady = true
                     }

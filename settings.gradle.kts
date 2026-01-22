@@ -21,3 +21,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "emby_tv"
 include(":app")
+
+// include(":decoder_ffmpeg")
+// project(":decoder_ffmpeg").projectDir = file("libraries/decoder_ffmpeg")
