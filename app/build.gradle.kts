@@ -91,9 +91,10 @@ dependencies {
     // 增加 extractor 以增强对 MKV 内置字幕(ASS/SSA/PGS)的解析能力
 //    implementation("androidx.media3:media3-extractor:$media3Version")
     implementation("androidx.media3:media3-datasource-okhttp:$media3Version")
+    implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.9.0+1")
 
     // 引用你刚才在 settings 里定义的本地模块
-    implementation(project(":decoder_ffmpeg"))
+//    implementation(project(":decoder_ffmpeg"))
 
     // 4. 图片加载 (使用 Coil 3)
     implementation("io.coil-kt.coil3:coil-compose:3.0.4")
