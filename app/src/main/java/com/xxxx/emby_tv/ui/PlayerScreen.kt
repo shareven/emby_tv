@@ -58,9 +58,11 @@ import androidx.media3.ui.PlayerView
 import androidx.compose.ui.res.stringResource
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -108,6 +110,7 @@ import kotlinx.coroutines.withContext
 /**
  * 播放器界面（Screen）- 使用 PlayerViewModel
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun PlayerScreen(
@@ -178,13 +181,14 @@ fun PlayerScreen(
 
     val playbackInfoFailText = stringResource(R.string.failed_get_playback_info)
     var playbackTrigger by remember { mutableStateOf(0) }
+    var currentVideoDecoderName by remember { mutableStateOf("") }
 
     // TrackSelector
     val trackSelector = remember {
         DefaultTrackSelector(context).apply {
             setParameters(
                 buildUponParameters()
-                .setTunnelingEnabled(true)
+                    .setTunnelingEnabled(true)
                     .setPreferredTextLanguage("zh")
             )
         }
@@ -207,8 +211,8 @@ fun PlayerScreen(
             .setBufferDurationsMs(
                 20_000,      // 最小缓冲 20 秒
                 50_000,      // 最大缓冲 50 秒 (降级以节省内存)
-                2_500,       
-                5_000        
+                2_500,
+                5_000
             )
             .setTargetBufferBytes(64 * 1024 * 1024) // 限制在 64MB 左右，防止 256MB 堆内存溢出
             .setPrioritizeTimeOverSizeThresholds(false) // 强制遵守内存限制
@@ -223,13 +227,15 @@ fun PlayerScreen(
 
 // 创建支持 OkHttp 的工厂
     val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
-        .setUserAgent(EmbyApi.CLIENT+"/"+CLIENT_VERSION)
+        .setUserAgent(EmbyApi.CLIENT + "/" + CLIENT_VERSION)
         // 这里可以添加 Emby 必须的通用 Header
-        .setDefaultRequestProperties(mapOf(
-            "X-Emby-Client" to EmbyApi.CLIENT,
-            "X-Emby-Client-Version" to CLIENT_VERSION,
-            "X-Emby-Device-Name" to EmbyApi.DEVICE_NAME,
-        ))
+        .setDefaultRequestProperties(
+            mapOf(
+                "X-Emby-Client" to EmbyApi.CLIENT,
+                "X-Emby-Client-Version" to CLIENT_VERSION,
+                "X-Emby-Device-Name" to EmbyApi.DEVICE_NAME,
+            )
+        )
 
     val mediaSourceFactory = DefaultMediaSourceFactory(context)
         .setDataSourceFactory(dataSourceFactory)
@@ -363,7 +369,10 @@ fun PlayerScreen(
                             .build()
 
                         player.setMediaItem(mediaItem, position)
-                        Log.e("FFmpegCheck", "FFmpeg Library Available: ${androidx.media3.decoder.ffmpeg.FfmpegLibrary.isAvailable()}")
+                        Log.e(
+                            "FFmpegCheck",
+                            "FFmpeg Library Available: ${androidx.media3.decoder.ffmpeg.FfmpegLibrary.isAvailable()}"
+                        )
                         player.prepare()
                         player.playWhenReady = true
                     }
@@ -440,7 +449,6 @@ fun PlayerScreen(
 
             val source = mediaResult.mediaSources.firstOrNull()
             val streams = source?.mediaStreams ?: emptyList()
-ErrorHandler.logError("level", streams.firstOrNull()?.level.toString(), null)
             // 检测片头信息
             val introRange = IntroSkipHelper.detectIntroRange(source?.chapters)
             if (introRange != null) {
@@ -742,6 +750,28 @@ ErrorHandler.logError("level", streams.firstOrNull()?.level.toString(), null)
 
     // 播放器监听
     DisposableEffect(player) {
+        player.addAnalyticsListener(object : AnalyticsListener {
+
+            override fun onVideoDecoderInitialized(
+                eventTime: AnalyticsListener.EventTime,
+                decoderName: String,
+                initializedMs: Long,
+                initializationDurationMs: Long,
+            ) {
+                currentVideoDecoderName = decoderName
+            }
+
+            override fun onAudioDecoderInitialized(
+                eventTime: AnalyticsListener.EventTime,
+                decoderName: String,
+                initializedMs: Long,
+                initializationDurationMs: Long,
+            ) {
+                // 例如 libffmpeg (如果用了FFmpeg扩展) 或 c2.android.ac3.decoder
+                android.util.Log.d("DecoderInfo", "音频解码器已初始化: $decoderName")
+            }
+        })
+
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
@@ -1008,7 +1038,8 @@ ErrorHandler.logError("level", streams.firstOrNull()?.level.toString(), null)
                     player = player,
                     isBuffering = isBuffering,
                     downloadSpeed = downloadSpeed,
-                    supportedDvProfiles = supportedDvProfiles
+                    supportedDvProfiles = supportedDvProfiles,
+                    currentVideoDecoderName = currentVideoDecoderName
                 )
 
             }

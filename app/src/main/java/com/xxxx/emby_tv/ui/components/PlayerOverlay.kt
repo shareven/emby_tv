@@ -85,6 +85,7 @@ fun PlayerOverlay(
     isBuffering: Boolean,
     downloadSpeed: Long = 0,
     supportedDvProfiles: List<DvProfileInfo> = emptyList(),
+    currentVideoDecoderName: String,
 ) {
     Box(
         modifier = Modifier
@@ -149,7 +150,7 @@ fun PlayerOverlay(
                 fontSize = 12.sp
             )
             Text(
-                text = getVideoDetailLine(videoStream, mediaSource, supportedDvProfiles),
+                text = getVideoDetailLine(videoStream, mediaSource),
                 color = Color.White,
                 fontSize = 12.sp
             )
@@ -162,7 +163,12 @@ fun PlayerOverlay(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = getVideoModeLine(session, mediaSource),
+                    text = getVideoModeLine(
+                        session,
+                        videoStream,
+                        supportedDvProfiles,
+                        currentVideoDecoderName
+                    ),
                     color = Color.LightGray,
                     fontSize = 12.sp
                 )
@@ -291,7 +297,6 @@ fun PlayerOverlay(
 }
 
 
-
 @Composable
 fun getStreamContainerLine(mediaSource: MediaSourceInfoDto?): String {
     if (mediaSource == null) return ""
@@ -392,22 +397,21 @@ fun getVideoMainLine(
 }
 
 @Composable
-fun getVideoDetailLine(videoStream: MediaStreamDto?, mediaSource: MediaSourceInfoDto?, supportedDvProfiles: List<DvProfileInfo>): String {
+fun getVideoDetailLine(videoStream: MediaStreamDto?, mediaSource: MediaSourceInfoDto?): String {
     if (videoStream == null && mediaSource == null) return ""
     val profile = (videoStream?.profile ?: "")
     val levelVal = (videoStream?.level)
     val level = if (levelVal != null && levelVal > 0) levelVal.toString() else ""
 
     val fpsVal =
-        (videoStream?.averageFrameRate)?.toInt() ?: (videoStream?.realFrameRate)?.toInt()?:0
-    val fps = if (fpsVal!=0) "$fpsVal ${stringResource(R.string.fps_suffix)}" else ""
+        (videoStream?.averageFrameRate)?.toInt() ?: (videoStream?.realFrameRate)?.toInt() ?: 0
+    val fps = if (fpsVal != 0) "$fpsVal ${stringResource(R.string.fps_suffix)}" else ""
 
     val bitrateVal = videoStream?.bitRate ?: mediaSource?.bitrate ?: mediaSource?.transcodingBitrate
     val bitrateStr = formatMbps(bitrateVal)
 
-    val dolbyVisionProfile= if(videoStream?.extendedVideoType=="DolbyVision") {
-        val profileNames = supportedDvProfiles.joinToString(", ") { it.profileName }
-        stringResource(R.string.dolby_vision_profiles, profileNames)
+    val dolbyVisionProfile = if (videoStream?.extendedVideoType == "DolbyVision") {
+        videoStream.extendedVideoSubTypeDescription ?: ""
     } else ""
 
     return listOfNotNull(
@@ -419,20 +423,55 @@ fun getVideoDetailLine(videoStream: MediaStreamDto?, mediaSource: MediaSourceInf
 }
 
 @Composable
-fun getVideoModeLine(session: SessionDto?, mediaSource: MediaSourceInfoDto?): String {
+fun getVideoModeLine(
+    session: SessionDto?,
+    videoStream: MediaStreamDto?,
+    supportedDvProfiles: List<DvProfileInfo>,
+    currentVideoDecoderName: String,
+): String {
     // 基础校验
     val playMethod = session?.playState?.playMethod ?: return ""
     val ti = session.transcodingInfo
 
     // 1. 直接播放 (Direct Play): 无需任何处理，服务器负载最低
-    if (playMethod == "DirectPlay" || ti == null) {
-        return stringResource(R.string.direct_play)
-    }
+    val isVideoDirect = playMethod == "DirectPlay" || ti == null || ti.isVideoDirect == true
 
-    val isVideoDirect = ti.isVideoDirect == true
+    val supportDolbyVisionProfile =
+        if (videoStream?.extendedVideoType == "DolbyVision" && currentVideoDecoderName.isNotEmpty()) {
+            val profileNames = supportedDvProfiles.joinToString(", ") { it.profileName }
+            stringResource(R.string.dolby_vision_profiles, profileNames) + "\n"
+        } else ""
+
+    val dolbyVisionDecoder =
+        if (videoStream?.extendedVideoType == "DolbyVision" && currentVideoDecoderName.isNotEmpty()) {
+
+            when {
+                // 匹配杜比视界：包含 .dv. 或者包含 dolby、dvhe (针对 OMX.MS.DOLBY_VISION.DVHE...)
+                currentVideoDecoderName.contains(".dv.", ignoreCase = true) ||
+                        currentVideoDecoderName.contains("dolby", ignoreCase = true) ||
+                        currentVideoDecoderName.contains("dvhe", ignoreCase = true) -> {
+                    stringResource(
+                        R.string.dolby_vision_decoder,
+                        currentVideoDecoderName
+                    )
+                }
+
+                // 匹配 HEVC：包含 .hevc. 或者包含 h265
+                currentVideoDecoderName.contains(".hevc.", ignoreCase = true) ||
+                        currentVideoDecoderName.contains("h265", ignoreCase = true) -> {
+                    stringResource(
+                        R.string.hevc_decoder,
+                        currentVideoDecoderName
+                    )
+                }
+
+                else -> stringResource(R.string.video_decoder, currentVideoDecoderName)
+            } + "\n"
+        } else ""
+
 
     if (isVideoDirect) {
-        return stringResource(R.string.direct_play)
+        return dolbyVisionDecoder + supportDolbyVisionProfile + stringResource(R.string.direct_play)
     }
 
     var isHardware = false

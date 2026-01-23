@@ -53,7 +53,7 @@ object PlayerTrackManager {
         val targetIndex = targetTrack.index?.toString() ?: ""
         val isLoadedViaConfig = targetTrack.supportsExternalStream == true || targetTrack.isExternal == true
 
-        Log.d(TAG, "Subtitle Selection: Target [EmbyIndex:$targetIndex, Label:$targetLabel, OrdinalIndex:$targetOrdinalIndex, LoadedViaConfig:$isLoadedViaConfig]")
+//        Log.d(TAG, "Subtitle Selection: Target [EmbyIndex:$targetIndex, Label:$targetLabel, OrdinalIndex:$targetOrdinalIndex, LoadedViaConfig:$isLoadedViaConfig]")
 
         // 开启文本轨道
         var parametersBuilder = player.trackSelectionParameters.buildUpon()
@@ -64,11 +64,11 @@ object PlayerTrackManager {
         var isMatched = false
 
         // 打印可用字幕轨道
-        Log.d(TAG, "--- Available Text Tracks ---")
+//        Log.d(TAG, "--- Available Text Tracks ---")
         trackGroups.forEachIndexed { gi, group ->
             for (i in 0 until group.length) {
                 val f = group.getTrackFormat(i)
-                Log.d(TAG, "Group[$gi] Track[$i]: ID=${f.id}, Label=${f.label}, Lang=${f.language}")
+//                Log.d(TAG, "Group[$gi] Track[$i]: ID=${f.id}, Label=${f.label}, Lang=${f.language}")
             }
         }
 
@@ -83,7 +83,7 @@ object PlayerTrackManager {
                             TrackSelectionOverride(group.mediaTrackGroup, i)
                         )
                         isMatched = true
-                        Log.d(TAG, "Matched subtitle by UniqueLabel: ${format.label} -> ID:${format.id}")
+//                        Log.d(TAG, "Matched subtitle by UniqueLabel: ${format.label} -> ID:${format.id}")
                         break@outer
                     }
                 }
@@ -99,7 +99,7 @@ object PlayerTrackManager {
                                 TrackSelectionOverride(group.mediaTrackGroup, i)
                             )
                             isMatched = true
-                            Log.d(TAG, "Matched subtitle by ID contains: ${format.id} -> Label:${format.label}")
+//                            Log.d(TAG, "Matched subtitle by ID contains: ${format.id} -> Label:${format.label}")
                             break@outer2
                         }
                     }
@@ -118,7 +118,7 @@ object PlayerTrackManager {
                         )
                         isMatched = true
                         val f = group.getTrackFormat(i)
-                        Log.d(TAG, "Matched subtitle by Ordinal: OrdinalIndex=$targetOrdinalIndex -> Track (ID:${f.id}, Label:${f.label})")
+//                        Log.d(TAG, "Matched subtitle by Ordinal: OrdinalIndex=$targetOrdinalIndex -> Track (ID:${f.id}, Label:${f.label})")
                         break@outerOrdinal
                     }
                     trackCounter++
@@ -169,12 +169,12 @@ object PlayerTrackManager {
         var isMatched = false
 
         // 打印可用音频轨道
-        Log.d(TAG, "--- Available Audio Tracks ---")
+        // Log.d(TAG, "--- Available Audio Tracks ---")
         var totalTracks = 0
         trackGroups.forEachIndexed { gi, group ->
             for (i in 0 until group.length) {
                 val f = group.getTrackFormat(i)
-                Log.d(TAG, "Group[$gi] Track[$i]: ID=${f.id}, Label=${f.label}, Lang=${f.language}")
+                // Log.d(TAG, "Group[$gi] Track[$i]: ID=${f.id}, Label=${f.label}, Lang=${f.language}")
                 totalTracks++
             }
         }

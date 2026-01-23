@@ -167,4 +167,7 @@
     <string name="searching">正在搜索</string>
     <string name="filtered">(已过滤)</string>
     <string name="dolby_vision_profiles">支持杜比视界: %1$s</string>
+    <string name="dolby_vision_decoder">杜比视界解码器: %1$s</string>
+    <string name="hevc_decoder">HEVC解码器: %1$s</string>
+    <string name="video_decoder">解码器: %1$s</string>
 </resources>

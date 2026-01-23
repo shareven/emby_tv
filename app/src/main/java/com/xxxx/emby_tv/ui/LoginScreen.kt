@@ -312,7 +312,7 @@ fun LoginScreen(
                         .fillMaxWidth(0.8f)
                         .height(56.dp)
                         //兼容移动端点击  TODO：移除
-                         .clickable(true, onClick = { onLoginClick() })
+                        //  .clickable(true, onClick = { onLoginClick() })
                         .focusRequester(loginButtonFocusRequester)
                         .onKeyEvent { keyEvent ->
                             if (keyEvent.type == KeyEventType.KeyDown) {

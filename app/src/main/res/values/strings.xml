@@ -167,4 +167,7 @@
     <string name="searching">Searching</string>
     <string name="filtered">(Filtered)</string>
     <string name="dolby_vision_profiles">Supported DV: %1$s</string>
+    <string name="dolby_vision_decoder">Dolby Vision Decoder: %1$s</string>
+    <string name="hevc_decoder">HEVC Decoder: %1$s</string>
+    <string name="video_decoder">Decoder: %1$s</string>
 </resources>

@@ -967,12 +967,9 @@ object EmbyApi {
         //添加ffmpeg支持的类型
         val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
         val codecListAll = MediaCodecList(MediaCodecList.ALL_CODECS)
-        ErrorHandler.logError("codecList",codecList.codecInfos.size.toString())
-        ErrorHandler.logError("codecListAll",codecListAll.codecInfos.size.toString())
         for (info in codecListAll.codecInfos) {
             if (info.isEncoder) continue
-             ErrorHandler.logError("supportedTypes",info.supportedTypes.joinToString(","))
-
+            
             for (type in info.supportedTypes) {
                 try {
                     val caps = info.getCapabilitiesForType(type)

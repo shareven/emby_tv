@@ -13,7 +13,7 @@ This is an open-source Emby client aimed at learning and exchanging technical kn
 
  ## 下载 / Download
 
- 最新版本 / Newest release: v2.0.7
+ 最新版本 / Newest release: v2.0.8
 
 
  [Android apk release](https://github.com/shareven/emby_tv/releases/)

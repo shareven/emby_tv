@@ -48,7 +48,7 @@ object SubtitleConfigBuilder {
             // 判断是否可以通过URL加载（外置或支持外部流）
             val isLoadableSubtitle =  track.isExternal == true
 
-            Log.d(TAG, "Track[$index]: Codec=$codec, IsExternal=${track.isExternal}, SupportsExternal=${track.supportsExternalStream}, Loadable=$isLoadableSubtitle")
+//            Log.d(TAG, "Track[$index]: Codec=$codec, IsExternal=${track.isExternal}, SupportsExternal=${track.supportsExternalStream}, Loadable=$isLoadableSubtitle")
 
             if (isLoadableSubtitle) {
                 // 对于 ASS/SSA/SUBRIP 请求 SRT 格式，让 Emby 转码
@@ -78,11 +78,11 @@ object SubtitleConfigBuilder {
                     .build()
 
                 subtitleConfigs.add(config)
-                Log.d(TAG, "Added subtitle config: Index=$index, URL=$subUrl, UniqueLabel=$uniqueLabel")
+//                Log.d(TAG, "Added subtitle config: Index=$index, URL=$subUrl, UniqueLabel=$uniqueLabel")
             }
         }
 
-        Log.d(TAG, "Total subtitle configs added: ${subtitleConfigs.size}")
+//        Log.d(TAG, "Total subtitle configs added: ${subtitleConfigs.size}")
         return subtitleConfigs
     }
 
