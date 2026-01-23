@@ -108,7 +108,7 @@ object PlayerTrackManager {
         }
 
         // 策略2：顺序匹配（用于直接播放的内嵌字幕）
-        if (!isMatched && !isLoadedViaConfig && targetOrdinalIndex >= 0) {
+        if (!isMatched && isLoadedViaConfig && targetOrdinalIndex >= 0) {
             var trackCounter = 0
             outerOrdinal@ for (group in trackGroups) {
                 for (i in 0 until group.length) {

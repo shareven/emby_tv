@@ -1,6 +1,5 @@
 package com.xxxx.emby_tv.ui
 
-import MyRenderersFactory
 import android.content.Context
 import android.net.Uri
 import android.os.Handler
@@ -185,6 +184,7 @@ fun PlayerScreen(
         DefaultTrackSelector(context).apply {
             setParameters(
                 buildUponParameters()
+                .setTunnelingEnabled(true)
                     .setPreferredTextLanguage("zh")
             )
         }
@@ -205,13 +205,13 @@ fun PlayerScreen(
     val loadControl = remember {
         DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                30_000,      // 最小缓冲时长 30 秒（开始播放前需要缓冲的最少时长）
-                120_000,     // 最大缓冲时长 120 秒（最多缓存 2 分钟内容）
-                2_500,       // 播放开始缓冲 2.5 秒（首次播放需要的最小缓冲）
-                5_000        // 重新缓冲时长 5 秒（缓冲耗尽后重新开始播放需要的缓冲）
+                20_000,      // 最小缓冲 20 秒
+                50_000,      // 最大缓冲 50 秒 (降级以节省内存)
+                2_500,       
+                5_000        
             )
-            .setTargetBufferBytes(100 * 1024 * 1024) // 目标缓存大小 100MB（适合 4K 内容）
-            .setPrioritizeTimeOverSizeThresholds(true) // 优先保证时间缓冲而非大小限制
+            .setTargetBufferBytes(64 * 1024 * 1024) // 限制在 64MB 左右，防止 256MB 堆内存溢出
+            .setPrioritizeTimeOverSizeThresholds(false) // 强制遵守内存限制
             .build()
     }
 
@@ -855,7 +855,7 @@ ErrorHandler.logError("level", streams.firstOrNull()?.level.toString(), null)
                 selectedSubtitleIndex = selectedSubtitleIndex,
                 selectedAudioIndex = selectedAudioIndex
             )
-
+            player.stop()
             player.removeListener(listener)
             player.setVideoSurface(null)
             player.release()
@@ -994,7 +994,7 @@ ErrorHandler.logError("level", streams.firstOrNull()?.level.toString(), null)
 
 
             // 2. Full Info Overlay Layer (only when isShowInfo)
-            if (!isShowInfo && !isPlaying) {
+            if (isShowInfo && !isPlaying) {
                 PlayerOverlay(
                     mediaInfo = mediaInfo,
                     mediaSource = media.mediaSources?.firstOrNull(),

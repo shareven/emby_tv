@@ -46,7 +46,7 @@ object SubtitleConfigBuilder {
             val lang = track.language ?: "und"
 
             // 判断是否可以通过URL加载（外置或支持外部流）
-            val isLoadableSubtitle = track.supportsExternalStream == true || track.isExternal == true
+            val isLoadableSubtitle =  track.isExternal == true
 
             Log.d(TAG, "Track[$index]: Codec=$codec, IsExternal=${track.isExternal}, SupportsExternal=${track.supportsExternalStream}, Loadable=$isLoadableSubtitle")
 
