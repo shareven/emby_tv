@@ -38,7 +38,6 @@ import com.xxxx.emby_tv.ui.viewmodel.LoginViewModel
 import com.xxxx.emby_tv.ui.viewmodel.LibraryViewModel
 import com.xxxx.emby_tv.ui.viewmodel.DetailViewModel
 import com.xxxx.emby_tv.ui.viewmodel.PlayerViewModel
-import com.xxxx.emby_tv.ui.viewmodel.UpdateViewModel
 import com.xxxx.emby_tv.ui.viewmodel.SearchViewModel
 
 
@@ -189,9 +188,8 @@ fun EmbyTvApp() {
 
                     // 更新页面
                     composable("update") {
-                        val updateViewModel: UpdateViewModel = viewModel()
                         UpdateScreen(
-                            updateViewModel = updateViewModel
+                            mainViewModel = mainViewModel
                         )
                     }
 

@@ -172,4 +172,7 @@
     <string name="video_decoder">解码器: %1$s</string>
     <string name="not_support_dolby_vision">不支持杜比视界</string>
     <string name="tunneling_mode">隧道模式：开</string>
+    <string name="current_version">当前版本: %1$s</string>
+    <string name="latest_version">最新版本: %1$s</string>
+    <string name="update_log">更新日志:</string>
 </resources>

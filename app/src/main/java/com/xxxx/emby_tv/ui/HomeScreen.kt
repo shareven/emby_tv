@@ -26,6 +26,8 @@ import com.xxxx.emby_tv.ui.components.NoData
 import com.xxxx.emby_tv.ui.components.TopStatusBar
 import com.xxxx.emby_tv.ui.viewmodel.HomeViewModel
 import com.xxxx.emby_tv.ui.viewmodel.MainViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.yield
 
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -64,6 +66,7 @@ fun HomeScreen(
                 showMenu = false
             },
             onUpdate = {
+                mainViewModel.checkUpdate()
                 showMenu = false
                 navController.navigate("update")
             },
@@ -236,8 +239,12 @@ private fun MediaSection(
         (maxLength.value * maxAspectRatio).dp
     }
     val focusRequester = remember { FocusRequester() }
+
+    // 当继续观看的 items 变化时，重新聚焦到第一个项目
     LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+        if (isContinueWatching && items.isNotEmpty()) {
+            focusRequester.requestFocus()
+        }
     }
 
     Column {

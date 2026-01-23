@@ -382,6 +382,7 @@ fun LoginScreen(
                 showMenu = false
             },
             onUpdate = {
+                mainViewModel.checkUpdate()
                 showMenu = false
                 navController.navigate("update")
             },

@@ -274,14 +274,26 @@ fun getVideoDynamicRangeMode(player: ExoPlayer): String {
     // 1. 获取当前播放的 Format（包含解码器选定后的最终格式）
     val format = player.videoFormat ?: return ""
 
-    // 2. 优先判断杜比视界 (Dolby Vision)
-    // 如果没有被降级，sampleMimeType 依然是杜比类型
+
+    //  如果 MIME 变成了 HEVC，说明已经进入了降级模式或本身就是 HDR 视频
+    val colorInfo = format.colorInfo ?: return "SDR"
+
+    // 关键点 A：如果 MIME 是杜比视界，且解码器已经成功初始化
     if (format.sampleMimeType == MimeTypes.VIDEO_DOLBY_VISION) {
-        return "Dolby Vision"
+        // 关键点 B：检查 colorTransfer (传输函数)
+        // 杜比视界原生渲染通常会向系统注册特定的传输函数，
+        // 或者保留杜比专有的色域元数据。
+
+        return if ( colorInfo.colorTransfer == C.COLOR_TRANSFER_ST2084) {
+            // 如果 Mime 是 DV，但传输函数是 ST2084 (PQ)，
+            // 这说明解码器剥离了杜比层，实际是以 HDR10 模式在渲染
+            "HDR10 (杜比降级)"
+        } else {
+            // 如果系统能识别出这是 DV 专有的渲染路径，则为真杜比
+            "Dolby Vision"
+        }
     }
 
-    // 3. 如果 MIME 变成了 HEVC，说明已经进入了降级模式或本身就是 HDR 视频
-    val colorInfo = format.colorInfo ?: return "SDR"
 
     // 4. 检查是否属于 HDR 范畴
     if (!ColorInfo.isTransferHdr(colorInfo)) {

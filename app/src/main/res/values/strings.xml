@@ -172,4 +172,7 @@
     <string name="video_decoder">Decoder: %1$s</string>
     <string name="not_support_dolby_vision">Dolby Vision not supported</string>
     <string name="tunneling_mode">Tunneling Mode: ON</string>
+    <string name="current_version">Current version: %1$s</string>
+    <string name="latest_version">Latest version: %1$s</string>
+    <string name="update_log">Update log:</string>
 </resources>

@@ -44,6 +44,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var downloadUrl by mutableStateOf("")
         private set
+        
+    var updateLog by mutableStateOf("")
+        private set
 
     val needUpdate: Boolean
         get() {
@@ -116,6 +119,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 val tagName = res.safeGetString("tag_name") ?: ""
+                val body = res.safeGetString("body") ?: ""
                 val assets = res["assets"]?.asJsonArray
 
                 if (assets != null && assets.size() > 0) {
@@ -123,6 +127,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 newVersion = tagName
+                updateLog = body
 
             } catch (e: Exception) {
                 ErrorHandler.logError("MainViewModel", "操作失败", e)
