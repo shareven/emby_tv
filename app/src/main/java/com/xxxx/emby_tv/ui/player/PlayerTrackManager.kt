@@ -72,40 +72,40 @@ object PlayerTrackManager {
             }
         }
 
-        if (isLoadedViaConfig) {
-            // 策略1：使用唯一 Label 格式 "Label [Index]" 匹配
-            val uniqueTargetLabel = "$targetLabel [$targetIndex]"
-            outer@ for (group in trackGroups) {
-                for (i in 0 until group.length) {
-                    val format = group.getTrackFormat(i)
-                    if (format.label == uniqueTargetLabel) {
-                        parametersBuilder.setOverrideForType(
-                            TrackSelectionOverride(group.mediaTrackGroup, i)
-                        )
-                        isMatched = true
-//                        Log.d(TAG, "Matched subtitle by UniqueLabel: ${format.label} -> ID:${format.id}")
-                        break@outer
-                    }
-                }
-            }
-
-            // 策略1.1：ID 包含 index 匹配（回退）
-            if (!isMatched) {
-                outer2@ for (group in trackGroups) {
-                    for (i in 0 until group.length) {
-                        val format = group.getTrackFormat(i)
-                        if (format.id?.endsWith(":$targetIndex") == true || format.id == targetIndex) {
-                            parametersBuilder.setOverrideForType(
-                                TrackSelectionOverride(group.mediaTrackGroup, i)
-                            )
-                            isMatched = true
-//                            Log.d(TAG, "Matched subtitle by ID contains: ${format.id} -> Label:${format.label}")
-                            break@outer2
-                        }
-                    }
-                }
-            }
-        }
+//        if (isLoadedViaConfig) {
+//            // 策略1：使用唯一 Label 格式 "Label [Index]" 匹配
+//            val uniqueTargetLabel = "$targetLabel [$targetIndex]"
+//            outer@ for (group in trackGroups) {
+//                for (i in 0 until group.length) {
+//                    val format = group.getTrackFormat(i)
+//                    if (format.label == uniqueTargetLabel) {
+//                        parametersBuilder.setOverrideForType(
+//                            TrackSelectionOverride(group.mediaTrackGroup, i)
+//                        )
+//                        isMatched = true
+////                        Log.d(TAG, "Matched subtitle by UniqueLabel: ${format.label} -> ID:${format.id}")
+//                        break@outer
+//                    }
+//                }
+//            }
+//
+//            // 策略1.1：ID 包含 index 匹配（回退）
+//            if (!isMatched) {
+//                outer2@ for (group in trackGroups) {
+//                    for (i in 0 until group.length) {
+//                        val format = group.getTrackFormat(i)
+//                        if (format.id?.endsWith(":$targetIndex") == true || format.id == targetIndex) {
+//                            parametersBuilder.setOverrideForType(
+//                                TrackSelectionOverride(group.mediaTrackGroup, i)
+//                            )
+//                            isMatched = true
+////                            Log.d(TAG, "Matched subtitle by ID contains: ${format.id} -> Label:${format.label}")
+//                            break@outer2
+//                        }
+//                    }
+//                }
+//            }
+//        }
 
         // 策略2：顺序匹配（用于直接播放的内嵌字幕）
         if (!isMatched && isLoadedViaConfig && targetOrdinalIndex >= 0) {
@@ -191,7 +191,7 @@ object PlayerTrackManager {
                         )
                         isMatched = true
                         val f = group.getTrackFormat(i)
-                        Log.d(TAG, "Matched audio by Ordinal: OrdinalIndex=$targetOrdinalIndex -> Track (ID:${f.id}, Label:${f.label})")
+//                        Log.d(TAG, "Matched audio by Ordinal: OrdinalIndex=$targetOrdinalIndex -> Track (ID:${f.id}, Label:${f.label})")
                         break@outerOrdinal
                     }
                     trackCounter++

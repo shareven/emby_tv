@@ -36,8 +36,8 @@ object SubtitleConfigBuilder {
     ): List<MediaItem.SubtitleConfiguration> {
         val subtitleConfigs = mutableListOf<MediaItem.SubtitleConfiguration>()
 
-        Log.d(TAG, "=== Building Subtitle Configurations ===")
-        Log.d(TAG, "Total subtitleTracks: ${subtitleTracks.size}")
+//        Log.d(TAG, "=== Building Subtitle Configurations ===")
+//        Log.d(TAG, "Total subtitleTracks: ${subtitleTracks.size}")
 
         subtitleTracks.forEach { track ->
             val index = track.index ?: 0

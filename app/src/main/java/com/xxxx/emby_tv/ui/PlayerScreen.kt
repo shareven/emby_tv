@@ -1,29 +1,19 @@
 package com.xxxx.emby_tv.ui
 
+import android.app.ActivityManager
 import android.content.Context
-import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.ViewGroup
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
-import androidx.tv.material3.MaterialTheme as TvMaterialTheme
 import androidx.tv.material3.*
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.*
@@ -32,8 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.Key
@@ -41,7 +29,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -56,32 +43,27 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
 import androidx.compose.ui.res.stringResource
+import androidx.media3.common.Format
 import androidx.media3.common.PlaybackException
-import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.analytics.AnalyticsListener
-import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
 import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.upstream.BandwidthMeter
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
-import androidx.media3.extractor.DefaultExtractorsFactory
-import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
 import com.xxxx.emby_tv.R
 import com.xxxx.emby_tv.Utils
-import com.xxxx.emby_tv.Utils.formatDuration
-import com.xxxx.emby_tv.Utils.formatKbps
-import com.xxxx.emby_tv.Utils.formatMbps
 import com.xxxx.emby_tv.data.repository.EmbyRepository
 import com.xxxx.emby_tv.data.model.BaseItemDto
 import com.xxxx.emby_tv.data.model.MediaDto
-import com.xxxx.emby_tv.data.model.MediaSourceInfoDto
 import com.xxxx.emby_tv.data.model.MediaStreamDto
 import com.xxxx.emby_tv.data.model.SessionDto
 import com.xxxx.emby_tv.ui.components.PlayerMenu
@@ -99,8 +81,8 @@ import com.xxxx.emby_tv.util.IntroSkipHelper
 import com.xxxx.emby_tv.data.local.PreferencesManager
 import com.xxxx.emby_tv.data.remote.EmbyApi
 import com.xxxx.emby_tv.data.remote.EmbyApi.CLIENT_VERSION
-import com.xxxx.emby_tv.data.remote.EmbyApi.DEVICE_NAME
 import com.xxxx.emby_tv.data.remote.HttpClient
+import com.xxxx.emby_tv.getVideoDynamicRangeMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -182,19 +164,91 @@ fun PlayerScreen(
     val playbackInfoFailText = stringResource(R.string.failed_get_playback_info)
     var playbackTrigger by remember { mutableStateOf(0) }
     var currentVideoDecoderName by remember { mutableStateOf("") }
+    var videoModeState by remember { mutableStateOf("") }
+    var isTunnelingSafe by remember { mutableStateOf(false) }
+
+    /**
+     * 2026 深度探测：查询底层 MediaCodec 列表，确认硬件是否声明了隧道能力
+     */
+    fun checkActualHardwareTunnelingSupport(): Boolean {
+        return try {
+            // 检查最常用的两种 4K 格式
+            val mimes = listOf(MimeTypes.VIDEO_DOLBY_VISION, MimeTypes.VIDEO_H265)
+            val isMinesOK = mimes.any { mime ->
+                val decoderInfos = MediaCodecUtil.getDecoderInfos(mime, false, false)
+                decoderInfos.any { info ->
+                    // 核心判断：硬件必须显式声明 it.tunneling 为 true
+                    info.hardwareAccelerated && info.tunneling && !info.softwareOnly
+                }
+            }
+            if (!isMinesOK) return false
+            supportedDvProfiles.isNotEmpty()
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     // TrackSelector
     val trackSelector = remember {
         DefaultTrackSelector(context).apply {
+            // 1. 获取基础参数
+            val baseParameters = buildUponParameters()
+                .setPreferredTextLanguage("zh")
+                // 开启这个：允许尝试超出硬件声明能力的解码（对杜比 P7 至关重要）
+                .setExceedRendererCapabilitiesIfNecessary(true)
+                .build()
+
+            // 2. 动态判断隧道模式：仅在电视支持且非音频软解时开启
+            isTunnelingSafe = checkActualHardwareTunnelingSupport()
+
             setParameters(
-                buildUponParameters()
-                    .setTunnelingEnabled(true)
-                    .setPreferredTextLanguage("zh")
+                baseParameters.buildUpon()
+                    .setTunnelingEnabled(isTunnelingSafe)
+                    .build()
             )
         }
     }
 
+
     val renderersFactory = DefaultRenderersFactory(context).apply {
+        // 1. 核心：增加解码器自动降级判断
+        setMediaCodecSelector { mimeType, requiresSecure, requiresTunneling ->
+            // 1. 获取默认解码器（如果是杜比视频，首选通常是 DV 解码器）
+            val dvDecoders =
+                MediaCodecUtil.getDecoderInfos(mimeType, requiresSecure, requiresTunneling)
+
+            if (mimeType == MimeTypes.VIDEO_DOLBY_VISION) {
+                // 2. 获取 HEVC 备选解码器
+                val hevcDecoders = MediaCodecUtil.getDecoderInfos(
+                    MimeTypes.VIDEO_H265,
+                    requiresSecure,
+                    requiresTunneling
+                )
+
+                // 3. 智能判断排序
+                val combined = ArrayList<MediaCodecInfo>()
+
+                // 检查是否有任何一个杜比解码器明确声称支持当前 Level/Profile
+                // Media3 会自动过滤掉完全不支持的，但对于 P7，很多电视报的是 "SUPPORT_UNKNOWN" 或功能受限
+                // 而且必须要有杜比视界的profile
+                val isHardwareLikelyToHandleDV =
+                    dvDecoders.any { it.hardwareAccelerated && !it.softwareOnly } && supportedDvProfiles.isNotEmpty()
+
+                if (isHardwareLikelyToHandleDV) {
+                    // 高性能电视：杜比优先，HEVC 垫后
+                    combined.addAll(dvDecoders)
+                    combined.addAll(hevcDecoders)
+                } else {
+                    // 低性能电视（或 DV 解码器缺失）：HEVC 优先，确保能播
+                    combined.addAll(hevcDecoders)
+                    combined.addAll(dvDecoders)
+                }
+                combined
+            } else {
+                dvDecoders
+            }
+        }
+
         // 逻辑：ExoPlayer 会先扫描系统 MediaCodecList。
         // 1. 如果电视硬件报支持该 Codec，优先用硬解。
         // 2. 如果电视硬件不支持（如 TrueHD/DTS），则自动切换到你的 FFmpeg 扩展。
@@ -207,15 +261,36 @@ fun PlayerScreen(
 
     // 缓存控制配置 - 针对 TV 端视频流媒体优化
     val loadControl = remember {
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        // 获取设备分配给当前 App 的总堆内存（单位：MB）
+        val memoryClass = activityManager.memoryClass
+
+        // 动态计算策略：
+        // 如果内存大于 256MB（开启了 largeHeap），给 128MB 缓存
+        // 如果内存小于 192MB（普通电视），给 32MB - 48MB 缓存，保命要紧
+        val targetBytes = if (memoryClass >= 256) {
+            128 * 1024 * 1024
+        } else if (memoryClass >= 128) {
+            64 * 1024 * 1024
+        } else {
+            32 * 1024 * 1024
+        }
+
         DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                20_000,      // 最小缓冲 20 秒
-                50_000,      // 最大缓冲 50 秒 (降级以节省内存)
-                2_500,
-                5_000
+                30_000, // 1. 提高最小缓冲到 30秒，防止网络抖动
+                60_000, // 2. 最大缓冲 60秒
+                1_500,  // 3. 减少播放启动所需的缓冲，让起播更快
+                3_000
             )
-            .setTargetBufferBytes(64 * 1024 * 1024) // 限制在 64MB 左右，防止 256MB 堆内存溢出
-            .setPrioritizeTimeOverSizeThresholds(false) // 强制遵守内存限制
+            // 关键：动态计算策略
+            // 4K 视频 64MB 绝对不够，128MB 在 256MB 堆内存中是安全的（占一半）
+            .setTargetBufferBytes(targetBytes)
+
+            // 5. 建议设为 true。在内存允许的情况下，优先保证缓冲时间
+            .setPrioritizeTimeOverSizeThresholds(true)
+            // 6. 开启后，播放器在后台缓冲时会更加激进
+            .setBackBuffer(10_000, true)
             .build()
     }
 
@@ -228,7 +303,6 @@ fun PlayerScreen(
 // 创建支持 OkHttp 的工厂
     val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
         .setUserAgent(EmbyApi.CLIENT + "/" + CLIENT_VERSION)
-        // 这里可以添加 Emby 必须的通用 Header
         .setDefaultRequestProperties(
             mapOf(
                 "X-Emby-Client" to EmbyApi.CLIENT,
@@ -312,7 +386,6 @@ fun PlayerScreen(
     // 实现转码回退逻辑
     fun fallbackToServerTranscode() {
         if (hasTriedTranscodeFallback) {
-
             return
         }
 
@@ -592,8 +665,8 @@ fun PlayerScreen(
             var tickCount = 0
             while (isActive) {
                 try {
-                    // 每 5 秒报告一次进度
-                    if (tickCount % 5 == 0) {
+                    // 每 9 秒报告一次进度
+                    if (tickCount % 9 == 0) {
                         playerViewModel.reportProgress(
                             mediaId = mediaId,
                             media = media,
@@ -751,6 +824,14 @@ fun PlayerScreen(
     // 播放器监听
     DisposableEffect(player) {
         player.addAnalyticsListener(object : AnalyticsListener {
+            override fun onVideoInputFormatChanged(
+                eventTime: AnalyticsListener.EventTime,
+                format: Format,
+                decoderReuseEvaluation: DecoderReuseEvaluation?
+            ) {
+                // 每次视频流切换或降级触发时更新
+                videoModeState = getVideoDynamicRangeMode(player)
+            }
 
             override fun onVideoDecoderInitialized(
                 eventTime: AnalyticsListener.EventTime,
@@ -768,7 +849,7 @@ fun PlayerScreen(
                 initializationDurationMs: Long,
             ) {
                 // 例如 libffmpeg (如果用了FFmpeg扩展) 或 c2.android.ac3.decoder
-                android.util.Log.d("DecoderInfo", "音频解码器已初始化: $decoderName")
+//                android.util.Log.d("DecoderInfo", "音频解码器已初始化: $decoderName")
             }
         })
 
@@ -1026,6 +1107,8 @@ fun PlayerScreen(
             // 2. Full Info Overlay Layer (only when isShowInfo)
             if (isShowInfo && !isPlaying) {
                 PlayerOverlay(
+                    videoModeState=videoModeState,
+                    isTunnelingSafe = isTunnelingSafe,
                     mediaInfo = mediaInfo,
                     mediaSource = media.mediaSources?.firstOrNull(),
                     session = session,

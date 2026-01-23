@@ -72,6 +72,8 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun PlayerOverlay(
+    videoModeState: String,
+    isTunnelingSafe: Boolean,
     mediaInfo: BaseItemDto,
     mediaSource: MediaSourceInfoDto?,
     session: SessionDto?,
@@ -121,6 +123,13 @@ fun PlayerOverlay(
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            if(isTunnelingSafe) Text(
+                text = stringResource(R.string.tunneling_mode),
+                color = Color.White,
+                fontSize = 14.sp
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
             Text(
                 text = stringResource(R.string.streaming),
                 color = Color.White,
@@ -147,7 +156,8 @@ fun PlayerOverlay(
             Text(
                 text = getVideoMainLine(videoStream, session, mediaSource),
                 color = Color.White,
-                fontSize = 12.sp
+                fontSize = 12.sp,
+                lineHeight = 15.sp,
             )
             Text(
                 text = getVideoDetailLine(videoStream, mediaSource),
@@ -167,10 +177,12 @@ fun PlayerOverlay(
                         session,
                         videoStream,
                         supportedDvProfiles,
-                        currentVideoDecoderName
+                        currentVideoDecoderName,
+                        videoModeState,
                     ),
                     color = Color.LightGray,
-                    fontSize = 12.sp
+                    fontSize = 12.sp,
+                    lineHeight = 15.sp,
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
@@ -192,7 +204,8 @@ fun PlayerOverlay(
                 Text(
                     text = getAudioModeLine(session, mediaSource),
                     color = Color.LightGray,
-                    fontSize = 12.sp
+                    fontSize = 12.sp,
+                    lineHeight = 15.sp,
                 )
             }
         }
@@ -428,10 +441,11 @@ fun getVideoModeLine(
     videoStream: MediaStreamDto?,
     supportedDvProfiles: List<DvProfileInfo>,
     currentVideoDecoderName: String,
+    videoModeState: String,
 ): String {
     // 基础校验
-    val playMethod = session?.playState?.playMethod ?: return ""
-    val ti = session.transcodingInfo
+    val playMethod = session?.playState?.playMethod ?:  ""
+    val ti = session?.transcodingInfo
 
     // 1. 直接播放 (Direct Play): 无需任何处理，服务器负载最低
     val isVideoDirect = playMethod == "DirectPlay" || ti == null || ti.isVideoDirect == true
@@ -439,8 +453,10 @@ fun getVideoModeLine(
     val supportDolbyVisionProfile =
         if (videoStream?.extendedVideoType == "DolbyVision" && currentVideoDecoderName.isNotEmpty()) {
             val profileNames = supportedDvProfiles.joinToString(", ") { it.profileName }
-            stringResource(R.string.dolby_vision_profiles, profileNames) + "\n"
+            if(supportedDvProfiles.isNotEmpty()) stringResource(R.string.dolby_vision_profiles, profileNames) + "\n"
+            else stringResource(R.string.not_support_dolby_vision)+ "\n"
         } else ""
+
 
     val dolbyVisionDecoder =
         if (videoStream?.extendedVideoType == "DolbyVision" && currentVideoDecoderName.isNotEmpty()) {
@@ -471,7 +487,7 @@ fun getVideoModeLine(
 
 
     if (isVideoDirect) {
-        return dolbyVisionDecoder + supportDolbyVisionProfile + stringResource(R.string.direct_play)
+        return dolbyVisionDecoder + supportDolbyVisionProfile + stringResource(R.string.direct_play) +"($videoModeState)"
     }
 
     var isHardware = false
@@ -492,7 +508,7 @@ fun getVideoModeLine(
         mbps.takeIf { it.isNotEmpty() }).joinToString(" ")
 
     if (codecInfo.isEmpty()) return stringResource(R.string.transcode)
-    return "${stringResource(R.string.transcode)} ($codecInfo)"
+    return "${stringResource(R.string.transcode)} ($codecInfo $videoModeState)"
 }
 
 @Composable

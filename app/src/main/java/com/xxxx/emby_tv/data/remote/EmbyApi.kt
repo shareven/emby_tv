@@ -35,7 +35,7 @@ object EmbyApi {
     private const val TAG = "EmbyApi"
     const val CLIENT = "shareven/emby_tv"
     val CLIENT_VERSION: String = BuildConfig.VERSION_NAME
-    const val DEVICE_NAME = "Android TV"
+    val DEVICE_NAME: String = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
     private val gson = Gson()

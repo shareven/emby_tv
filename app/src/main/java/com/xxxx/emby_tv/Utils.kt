@@ -7,6 +7,12 @@ import com.google.gson.JsonObject
 import com.xxxx.emby_tv.data.model.BaseItemDto
 import com.xxxx.emby_tv.data.model.MediaDto
 import android.media.MediaCodecList
+import androidx.annotation.OptIn
+import androidx.media3.common.C
+import androidx.media3.common.ColorInfo
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
 
 object Utils {
     val gson = Gson()
@@ -256,4 +262,50 @@ private fun mapDvLevelToName(level: Int): String {
         MediaCodecInfo.CodecProfileLevel.DolbyVisionLevelUhd120 -> "4K 120fps"
         else -> "Level $level"
     }
+}
+
+
+/**
+ * 判断当前视频渲染状态
+ * 覆盖：Dolby Vision HDR10+, HDR10, HLG, SDR
+ */
+@OptIn(UnstableApi::class)
+fun getVideoDynamicRangeMode(player: ExoPlayer): String {
+    // 1. 获取当前播放的 Format（包含解码器选定后的最终格式）
+    val format = player.videoFormat ?: return ""
+
+    // 2. 优先判断杜比视界 (Dolby Vision)
+    // 如果没有被降级，sampleMimeType 依然是杜比类型
+    if (format.sampleMimeType == MimeTypes.VIDEO_DOLBY_VISION) {
+        return "Dolby Vision"
+    }
+
+    // 3. 如果 MIME 变成了 HEVC，说明已经进入了降级模式或本身就是 HDR 视频
+    val colorInfo = format.colorInfo ?: return "SDR"
+
+    // 4. 检查是否属于 HDR 范畴
+    if (!ColorInfo.isTransferHdr(colorInfo)) {
+        return "SDR"
+    }
+
+    // 5. 判断 HLG
+    if (colorInfo.colorTransfer == C.COLOR_TRANSFER_HLG) {
+        return "HLG"
+    }
+
+    // 6. 区分 HDR10 和 HDR10+
+    if (colorInfo.colorTransfer == C.COLOR_TRANSFER_ST2084) {
+        // 检查元数据中是否包含 HDR10+ 的动态信息
+        val hasDynamicMetadata = format.metadata?.let { metadata ->
+            (0 until metadata.length()).any { i ->
+                val entry = metadata.get(i)
+                // HDR10+ 在 Media3 中通常体现为 HdrStaticInfo 或特定的 Json 数据
+                entry.toString().contains("HdrStaticInfo", ignoreCase = true)
+            }
+        } ?: false
+
+        return if (hasDynamicMetadata) "HDR10+" else "HDR10"
+    }
+
+    return "HDR"
 }
