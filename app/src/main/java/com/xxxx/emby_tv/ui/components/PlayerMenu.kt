@@ -62,7 +62,18 @@ fun PlayerMenu(
     repository: EmbyRepository,
     onNavigateToPlayer: (BaseItemDto) -> Unit,
     autoSkipIntro: Boolean = false,
-    onAutoSkipIntroChange: (Boolean) -> Unit = {}
+    onAutoSkipIntroChange: (Boolean) -> Unit = {},
+    minBufferMs: Int = 40_000,
+    onMinBufferMsChange: (Int) -> Unit = {},
+    maxBufferMs: Int = 120_000,
+    onMaxBufferMsChange: (Int) -> Unit = {},
+    playbackBufferMs: Int = 3_000,
+    onPlaybackBufferMsChange: (Int) -> Unit = {},
+    rebufferMs: Int = 5_000,
+    onRebufferMsChange: (Int) -> Unit = {},
+    bufferSizeBytes: Int = 134_217_728,
+    onBufferSizeBytesChange: (Int) -> Unit = {},
+    onResetBufferDefaults: () -> Unit = {}
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
@@ -79,6 +90,7 @@ fun PlayerMenu(
         if (isSeries) list.add("Mode")
         list.add("Correction") // ...
         list.add("IntroSkip") // Intro Skip settings
+        list.add("Buffer") // Buffer settings
         list
     }
 
@@ -129,6 +141,7 @@ fun PlayerMenu(
                                 "Mode" -> stringResource(R.string.play_mode)
                                 "Correction" -> stringResource(R.string.playback_correction)
                                 "IntroSkip" -> stringResource(R.string.skip_intro)
+                                "Buffer" -> stringResource(R.string.buffer_settings)
                                 else -> title
                             }
 
@@ -192,6 +205,23 @@ fun PlayerMenu(
                             "IntroSkip" -> IntroSkipTab(
                                 autoSkipIntro,
                                 onAutoSkipIntroChange
+                            )
+                            "Buffer" -> BufferSettingsTab(
+                                minBufferMs = minBufferMs,
+                                onMinBufferMsChange = onMinBufferMsChange,
+                                maxBufferMs = maxBufferMs,
+                                onMaxBufferMsChange = onMaxBufferMsChange,
+                                playbackBufferMs = playbackBufferMs,
+                                onPlaybackBufferMsChange = onPlaybackBufferMsChange,
+                                rebufferMs = rebufferMs,
+                                onRebufferMsChange = onRebufferMsChange,
+                                bufferSizeBytes = bufferSizeBytes,
+                                onBufferSizeBytesChange = onBufferSizeBytesChange,
+                                onResetDefault = onResetBufferDefaults,
+                                onReplay = {
+                                    onDismiss()
+                                    onNavigateToPlayer(mediaInfo)
+                                }
                             )
 
                         }
@@ -525,8 +555,7 @@ fun SubtitlesTab(tracks: List<MediaStreamDto>, selectedIndex: Int, onSelect: (In
 @Composable
 fun AudioTab(tracks: List<MediaStreamDto>, selectedIndex: Int, onSelect: (Int) -> Unit) {
     LazyColumn(contentPadding = PaddingValues(horizontal = 150.dp)) {
-        item {
-        }
+
         items(tracks) { track ->
             val index = (track.index) ?: -1
             val title =

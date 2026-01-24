@@ -987,11 +987,11 @@ object EmbyApi {
                         type.equals("video/av01", ignoreCase = true) -> videoCodecs.add("av1")
                         type.equals("video/x-vnd.on2.vp8", ignoreCase = true) -> videoCodecs.add("vp8")
                         type.equals("video/x-vnd.on2.vp9", ignoreCase = true) -> videoCodecs.add("vp9")
-                        type.equals("audio/mp4a-latm", ignoreCase = true) -> audioCodecs.add("aac")
+                        // type.equals("audio/mp4a-latm", ignoreCase = true) -> audioCodecs.add("aac")
 //                        type.equals("audio/ac3", ignoreCase = true) -> audioCodecs.add("ac3")
 //                        type.equals("audio/eac3", ignoreCase = true) -> audioCodecs.add("eac3")
-                        type.equals("audio/mpeg", ignoreCase = true) -> audioCodecs.add("mp3")
-                        type.equals("audio/flac", ignoreCase = true) -> audioCodecs.add("flac")
+                        // type.equals("audio/mpeg", ignoreCase = true) -> audioCodecs.add("mp3")
+                        // type.equals("audio/flac", ignoreCase = true) -> audioCodecs.add("flac")
                         type.equals("audio/opus", ignoreCase = true) -> audioCodecs.add("opus")
                         type.equals("audio/vnd.dts", true) -> audioCodecs.add("dts")
                         type.equals("audio/vnd.dts.hd", true) -> {
@@ -999,7 +999,7 @@ object EmbyApi {
                             audioCodecs.add("dtshd")
                         }
 //                        type.equals("audio/true-hd", true) -> audioCodecs.add("truehd")
-                        type.equals("audio/eac3-joc", true) -> audioCodecs.add("eac3")
+                        // type.equals("audio/eac3-joc", true) -> audioCodecs.add("eac3")
                         type.equals("audio/ac4", true) -> audioCodecs.add("ac4")
                     }
                     audioCodecs.addAll(listOf("flac", "alac", "pcm_mulaw", "pcm_alaw", "mp3", "aac", "ac3", "eac3", "dca", "mlp", "truehd"))

@@ -2,6 +2,7 @@ package com.xxxx.emby_tv.ui
 
 import android.app.ActivityManager
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -82,7 +83,6 @@ import com.xxxx.emby_tv.data.local.PreferencesManager
 import com.xxxx.emby_tv.data.remote.EmbyApi
 import com.xxxx.emby_tv.data.remote.EmbyApi.CLIENT_VERSION
 import com.xxxx.emby_tv.data.remote.HttpClient
-import com.xxxx.emby_tv.getVideoDynamicRangeMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -157,6 +157,13 @@ fun PlayerScreen(
     var autoSkipIntro by remember { mutableStateOf(preferencesManager.autoSkipIntro) }
     var hasAutoSkipped by remember { mutableStateOf(false) }
 
+    // 缓冲设置 - 从 PreferencesManager 加载默认值
+    var minBufferMs by remember { mutableIntStateOf(preferencesManager.minBufferMs) }
+    var maxBufferMs by remember { mutableIntStateOf(preferencesManager.maxBufferMs) }
+    var playbackBufferMs by remember { mutableIntStateOf(preferencesManager.playbackBufferMs) }
+    var rebufferMs by remember { mutableIntStateOf(preferencesManager.rebufferMs) }
+    var bufferSizeBytes by remember { mutableIntStateOf(preferencesManager.bufferSizeBytes) }
+
     // 收集设备支持的杜比视界profile
     val supportedDvProfiles by playerViewModel.supportedDvProfiles.collectAsState()
 
@@ -164,7 +171,6 @@ fun PlayerScreen(
     val playbackInfoFailText = stringResource(R.string.failed_get_playback_info)
     var playbackTrigger by remember { mutableStateOf(0) }
     var currentVideoDecoderName by remember { mutableStateOf("") }
-    var videoModeState by remember { mutableStateOf("") }
     var isTunnelingSafe by remember { mutableStateOf(false) }
 
     /**
@@ -260,37 +266,30 @@ fun PlayerScreen(
     }
 
     // 缓存控制配置 - 针对 TV 端视频流媒体优化
-    val loadControl = remember {
+    val loadControl = remember(minBufferMs, maxBufferMs, playbackBufferMs, rebufferMs, bufferSizeBytes) {
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        // 获取设备分配给当前 App 的总堆内存（单位：MB）
         val memoryClass = activityManager.memoryClass
+        val largeHeap = context.applicationInfo.flags and ApplicationInfo.FLAG_LARGE_HEAP != 0
 
-        // 动态计算策略：
-        // 如果内存大于 256MB（开启了 largeHeap），给 128MB 缓存
-        // 如果内存小于 192MB（普通电视），给 32MB - 48MB 缓存，保命要紧
-        val targetBytes = if (memoryClass >= 256) {
-            128 * 1024 * 1024
+        val targetBytes = if (largeHeap || memoryClass >= 512) {
+            bufferSizeBytes.coerceAtLeast(256 * 1024 * 1024)
+        } else if (memoryClass >= 256) {
+            bufferSizeBytes.coerceAtLeast(128 * 1024 * 1024)
         } else if (memoryClass >= 128) {
-            64 * 1024 * 1024
+            bufferSizeBytes.coerceAtLeast(64 * 1024 * 1024)
         } else {
-            32 * 1024 * 1024
+            bufferSizeBytes.coerceAtLeast(32 * 1024 * 1024)
         }
 
         DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                30_000, // 1. 提高最小缓冲到 30秒，防止网络抖动
-                60_000, // 2. 最大缓冲 60秒
-                1_500,  // 3. 减少播放启动所需的缓冲，让起播更快
-                3_000
+                minBufferMs,
+                maxBufferMs,
+                playbackBufferMs,
+                rebufferMs
             )
-            // 关键：动态计算策略
-            // 4K 视频 64MB 绝对不够，128MB 在 256MB 堆内存中是安全的（占一半）
             .setTargetBufferBytes(targetBytes)
-
-            // 5. 建议设为 true。在内存允许的情况下，优先保证缓冲时间
             .setPrioritizeTimeOverSizeThresholds(true)
-            // 6. 开启后，播放器在后台缓冲时会更加激进
-            .setBackBuffer(10_000, true)
             .build()
     }
 
@@ -824,15 +823,7 @@ fun PlayerScreen(
     // 播放器监听
     DisposableEffect(player) {
         player.addAnalyticsListener(object : AnalyticsListener {
-            override fun onVideoInputFormatChanged(
-                eventTime: AnalyticsListener.EventTime,
-                format: Format,
-                decoderReuseEvaluation: DecoderReuseEvaluation?
-            ) {
-                // 每次视频流切换或降级触发时更新
-                videoModeState = getVideoDynamicRangeMode(player)
-            }
-
+               
             override fun onVideoDecoderInitialized(
                 eventTime: AnalyticsListener.EventTime,
                 decoderName: String,
@@ -1107,7 +1098,6 @@ fun PlayerScreen(
             // 2. Full Info Overlay Layer (only when isShowInfo)
             if (isShowInfo && !isPlaying) {
                 PlayerOverlay(
-                    videoModeState=videoModeState,
                     isTunnelingSafe = isTunnelingSafe,
                     mediaInfo = mediaInfo,
                     mediaSource = media.mediaSources?.firstOrNull(),
@@ -1254,6 +1244,39 @@ fun PlayerScreen(
                     onAutoSkipIntroChange = {
                         autoSkipIntro = it
                         preferencesManager.autoSkipIntro = it
+                    },
+                    minBufferMs = minBufferMs,
+                    onMinBufferMsChange = {
+                        minBufferMs = it
+                        preferencesManager.minBufferMs = it
+                    },
+                    maxBufferMs = maxBufferMs,
+                    onMaxBufferMsChange = {
+                        maxBufferMs = it
+                        preferencesManager.maxBufferMs = it
+                    },
+                    playbackBufferMs = playbackBufferMs,
+                    onPlaybackBufferMsChange = {
+                        playbackBufferMs = it
+                        preferencesManager.playbackBufferMs = it
+                    },
+                    rebufferMs = rebufferMs,
+                    onRebufferMsChange = {
+                        rebufferMs = it
+                        preferencesManager.rebufferMs = it
+                    },
+                    bufferSizeBytes = bufferSizeBytes,
+                    onBufferSizeBytesChange = {
+                        bufferSizeBytes = it
+                        preferencesManager.bufferSizeBytes = it
+                    },
+                    onResetBufferDefaults = {
+                        val defaults = preferencesManager.getBufferDefaults()
+                        minBufferMs = defaults.minBufferMs
+                        maxBufferMs = defaults.maxBufferMs
+                        playbackBufferMs = defaults.playbackBufferMs
+                        rebufferMs = defaults.rebufferMs
+                        bufferSizeBytes = defaults.bufferSizeBytes
                     },
                     isFavorite = isFavorite,
                     onToggleFavorite = {

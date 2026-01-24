@@ -33,6 +33,49 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean(KEY_AUTO_SKIP_INTRO, false)
         set(value) = prefs.edit().putBoolean(KEY_AUTO_SKIP_INTRO, value).apply()
 
+    // === 缓冲设置 ===
+
+    var minBufferMs: Int
+        get() = prefs.getInt(KEY_MIN_BUFFER_MS, DEFAULT_MIN_BUFFER_MS)
+        set(value) = prefs.edit().putInt(KEY_MIN_BUFFER_MS, value).apply()
+
+    var maxBufferMs: Int
+        get() = prefs.getInt(KEY_MAX_BUFFER_MS, DEFAULT_MAX_BUFFER_MS)
+        set(value) = prefs.edit().putInt(KEY_MAX_BUFFER_MS, value).apply()
+
+    var playbackBufferMs: Int
+        get() = prefs.getInt(KEY_PLAYBACK_BUFFER_MS, DEFAULT_PLAYBACK_BUFFER_MS)
+        set(value) = prefs.edit().putInt(KEY_PLAYBACK_BUFFER_MS, value).apply()
+
+    var rebufferMs: Int
+        get() = prefs.getInt(KEY_REBUFFER_MS, DEFAULT_REBUFFER_MS)
+        set(value) = prefs.edit().putInt(KEY_REBUFFER_MS, value).apply()
+
+    var bufferSizeBytes: Int
+        get() = prefs.getInt(KEY_BUFFER_SIZE_BYTES, DEFAULT_BUFFER_SIZE_BYTES)
+        set(value) = prefs.edit().putInt(KEY_BUFFER_SIZE_BYTES, value).apply()
+
+    /**
+     * 获取缓冲设置默认值
+     */
+    fun getBufferDefaults(): BufferDefaults {
+        return BufferDefaults(
+            minBufferMs = DEFAULT_MIN_BUFFER_MS,
+            maxBufferMs = DEFAULT_MAX_BUFFER_MS,
+            playbackBufferMs = DEFAULT_PLAYBACK_BUFFER_MS,
+            rebufferMs = DEFAULT_REBUFFER_MS,
+            bufferSizeBytes = DEFAULT_BUFFER_SIZE_BYTES
+        )
+    }
+
+    data class BufferDefaults(
+        val minBufferMs: Int,
+        val maxBufferMs: Int,
+        val playbackBufferMs: Int,
+        val rebufferMs: Int,
+        val bufferSizeBytes: Int
+    )
+
     // === 通用方法 ===
 
     fun getString(key: String, defaultValue: String? = null): String? {
@@ -81,6 +124,19 @@ class PreferencesManager(context: Context) {
         private const val KEY_DISABLE_HEVC = "disable_hevc"
         private const val KEY_AUTO_SKIP_INTRO = "auto_skip_intro"
 
+        private const val KEY_MIN_BUFFER_MS = "min_buffer_ms"
+        private const val KEY_MAX_BUFFER_MS = "max_buffer_ms"
+        private const val KEY_PLAYBACK_BUFFER_MS = "playback_buffer_ms"
+        private const val KEY_REBUFFER_MS = "rebuffer_ms"
+        private const val KEY_BUFFER_SIZE_BYTES = "buffer_size_bytes"
+
         private const val DEFAULT_THEME_ID = "purple"
+
+        // 缓冲设置默认值
+        const val DEFAULT_MIN_BUFFER_MS = 40_000
+        const val DEFAULT_MAX_BUFFER_MS = 120_000
+        const val DEFAULT_PLAYBACK_BUFFER_MS = 3_000
+        const val DEFAULT_REBUFFER_MS = 5_000
+        const val DEFAULT_BUFFER_SIZE_BYTES = 134_217_728 // 128MB
     }
 }

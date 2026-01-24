@@ -13,7 +13,7 @@ This is an open-source Emby client aimed at learning and exchanging technical kn
 
  ## 下载 / Download
 
- 最新版本 / Newest release: v2.0.7
+ 最新版本 / Newest release: v2.0.8
 
 
  [Android apk release](https://github.com/shareven/emby_tv/releases/)
@@ -35,6 +35,9 @@ This is an open-source Emby client aimed at learning and exchanging technical kn
 - 首页展示收藏列表
 - 搜索功能，支持多服务器多帐号的融合搜索
 - 支持跳过片头
+- 支持缓冲设置
+- 支持杜比视界硬解，显示杜比视界相关信息
+- 支持更多音频本地ffmpeg解码（"flac", "alac", "pcm_mulaw", "pcm_alaw", "mp3", "aac", "ac3", "eac3", "dca", "mlp", "truehd"）
 
 - Focus and key handling for TV remotes
 - Player with direct stream/transcode info
@@ -46,6 +49,9 @@ This is an open-source Emby client aimed at learning and exchanging technical kn
 - Displays a favorites list on the homepage
 - Search function: Supports integrated searching across multiple servers and accounts. 
 - Skip Intro: Supports skipping opening credits/intros. 
+- Buffer settings support
+- Supports Dolby Vision hardware decoding, displays Dolby Vision related information
+- Supports more audio local ffmpeg decoding ("flac", "alac", "pcm_mulaw", "pcm_alaw", "mp3", "aac", "ac3", "eac3", "dca", "mlp", "truehd")
 
 ## 展示 / Show
 

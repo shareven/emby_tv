@@ -7,12 +7,6 @@ import com.google.gson.JsonObject
 import com.xxxx.emby_tv.data.model.BaseItemDto
 import com.xxxx.emby_tv.data.model.MediaDto
 import android.media.MediaCodecList
-import androidx.annotation.OptIn
-import androidx.media3.common.C
-import androidx.media3.common.ColorInfo
-import androidx.media3.common.MimeTypes
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
 
 object Utils {
     val gson = Gson()
@@ -265,59 +259,3 @@ private fun mapDvLevelToName(level: Int): String {
 }
 
 
-/**
- * 判断当前视频渲染状态
- * 覆盖：Dolby Vision HDR10+, HDR10, HLG, SDR
- */
-@OptIn(UnstableApi::class)
-fun getVideoDynamicRangeMode(player: ExoPlayer): String {
-    // 1. 获取当前播放的 Format（包含解码器选定后的最终格式）
-    val format = player.videoFormat ?: return ""
-
-
-    //  如果 MIME 变成了 HEVC，说明已经进入了降级模式或本身就是 HDR 视频
-    val colorInfo = format.colorInfo ?: return "SDR"
-
-    // 关键点 A：如果 MIME 是杜比视界，且解码器已经成功初始化
-    if (format.sampleMimeType == MimeTypes.VIDEO_DOLBY_VISION) {
-        // 关键点 B：检查 colorTransfer (传输函数)
-        // 杜比视界原生渲染通常会向系统注册特定的传输函数，
-        // 或者保留杜比专有的色域元数据。
-
-        return if ( colorInfo.colorTransfer == C.COLOR_TRANSFER_ST2084) {
-            // 如果 Mime 是 DV，但传输函数是 ST2084 (PQ)，
-            // 这说明解码器剥离了杜比层，实际是以 HDR10 模式在渲染
-            "HDR10 (杜比降级)"
-        } else {
-            // 如果系统能识别出这是 DV 专有的渲染路径，则为真杜比
-            "Dolby Vision"
-        }
-    }
-
-
-    // 4. 检查是否属于 HDR 范畴
-    if (!ColorInfo.isTransferHdr(colorInfo)) {
-        return "SDR"
-    }
-
-    // 5. 判断 HLG
-    if (colorInfo.colorTransfer == C.COLOR_TRANSFER_HLG) {
-        return "HLG"
-    }
-
-    // 6. 区分 HDR10 和 HDR10+
-    if (colorInfo.colorTransfer == C.COLOR_TRANSFER_ST2084) {
-        // 检查元数据中是否包含 HDR10+ 的动态信息
-        val hasDynamicMetadata = format.metadata?.let { metadata ->
-            (0 until metadata.length()).any { i ->
-                val entry = metadata.get(i)
-                // HDR10+ 在 Media3 中通常体现为 HdrStaticInfo 或特定的 Json 数据
-                entry.toString().contains("HdrStaticInfo", ignoreCase = true)
-            }
-        } ?: false
-
-        return if (hasDynamicMetadata) "HDR10+" else "HDR10"
-    }
-
-    return "HDR"
-}

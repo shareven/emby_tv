@@ -171,8 +171,36 @@
     <string name="hevc_decoder">HEVC Decoder: %1$s</string>
     <string name="video_decoder">Decoder: %1$s</string>
     <string name="not_support_dolby_vision">Dolby Vision not supported</string>
+    <string name="dolby_downgrade">Dolby Downgrade</string>
     <string name="tunneling_mode">Tunneling Mode: ON</string>
+    <string name="replay">Replay</string>
     <string name="current_version">Current version: %1$s</string>
     <string name="latest_version">Latest version: %1$s</string>
     <string name="update_log">Update log:</string>
+
+    <!-- Buffer Settings -->
+    <string name="buffer_settings">Buffer Settings</string>
+    <string name="min_buffer">Min Buffer</string>
+    <string name="min_buffer_desc">Minimum buffer to maintain. Higher values prevent stuttering on unstable networks.</string>
+    <string name="min_buffer_recommend">Recommended: 30-60s for normal networks, 60-90s for unstable networks</string>
+
+    <string name="max_buffer">Max Buffer</string>
+    <string name="max_buffer_desc">Maximum buffer limit. Higher values use more storage but provide smoother playback.</string>
+    <string name="max_buffer_recommend">Recommended: 60-120s</string>
+
+    <string name="playback_buffer">Startup Buffer</string>
+    <string name="playback_buffer_desc">Buffer needed before first playback. Lower values start faster but may rebuffer.</string>
+    <string name="playback_buffer_recommend">Recommended: 1-3s for fast networks, 3-5s for slow networks</string>
+
+    <string name="rebuffer">Rebuffer</string>
+    <string name="rebuffer_desc">Buffer needed to resume after stuttering. Higher values reduce repeated buffering.</string>
+    <string name="rebuffer_recommend">Recommended: 5-10s</string>
+
+    <string name="buffer_size">Buffer Size</string>
+    <string name="buffer_size_desc">Target buffer bytes for 4K/HDR content. Larger values require more memory.</string>
+    <string name="buffer_size_recommend">Recommended: 64-128MB for normal, 256MB+ for 4K HDR</string>
+
+    <string name="reset_default">Reset to Default</string>
+    <string name="seconds">%1$ds</string>
+    <string name="mega_bytes">%1$dMB</string>
 </resources>

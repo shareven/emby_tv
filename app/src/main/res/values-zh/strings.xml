@@ -171,8 +171,36 @@
     <string name="hevc_decoder">HEVC解码器: %1$s</string>
     <string name="video_decoder">解码器: %1$s</string>
     <string name="not_support_dolby_vision">不支持杜比视界</string>
+    <string name="dolby_downgrade">杜比降级</string>
     <string name="tunneling_mode">隧道模式：开</string>
+    <string name="replay">重新播放</string>
     <string name="current_version">当前版本: %1$s</string>
     <string name="latest_version">最新版本: %1$s</string>
     <string name="update_log">更新日志:</string>
+
+    <!-- Buffer Settings -->
+    <string name="buffer_settings">缓冲设置</string>
+    <string name="min_buffer">最小缓冲</string>
+    <string name="min_buffer_desc">保持的最小缓冲时间。值越高，在不稳定网络上越不容易卡顿。</string>
+    <string name="min_buffer_recommend">推荐：正常网络30-60秒，不稳定网络60-90秒</string>
+
+    <string name="max_buffer">最大缓冲</string>
+    <string name="max_buffer_desc">最大缓冲限制。值越高越流畅，但占用更多存储。</string>
+    <string name="max_buffer_recommend">推荐：60-120秒</string>
+
+    <string name="playback_buffer">起播缓冲</string>
+    <string name="playback_buffer_desc">首次播放所需的缓冲。值越低起播越快，但可能需要重新缓冲。</string>
+    <string name="playback_buffer_recommend">推荐：快速网络1-3秒，慢速网络3-5秒</string>
+
+    <string name="rebuffer">重新缓冲</string>
+    <string name="rebuffer_desc">卡顿后恢复播放所需的缓冲。值越高越不易反复卡顿。</string>
+    <string name="rebuffer_recommend">推荐：5-10秒</string>
+
+    <string name="buffer_size">缓冲大小</string>
+    <string name="buffer_size_desc">4K/HDR内容的缓冲字节数。越大需要越多内存。</string>
+    <string name="buffer_size_recommend">推荐：普通64-128MB，4K HDR 256MB以上</string>
+
+    <string name="reset_default">恢复默认</string>
+    <string name="seconds">%1$d秒</string>
+    <string name="mega_bytes">%1$dMB</string>
 </resources>
