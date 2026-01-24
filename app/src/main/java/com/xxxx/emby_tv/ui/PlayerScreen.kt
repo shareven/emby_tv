@@ -265,20 +265,33 @@ fun PlayerScreen(
         setEnableDecoderFallback(true)
     }
 
+    // 检查并修复约束条件
+    LaunchedEffect(minBufferMs, maxBufferMs, playbackBufferMs, rebufferMs) {
+        val isConstraintValid = maxBufferMs >= minBufferMs &&
+                                minBufferMs >= rebufferMs &&
+                                rebufferMs >= playbackBufferMs
+        if (!isConstraintValid) {
+            val defaults = preferencesManager.getBufferDefaults()
+            minBufferMs = defaults.minBufferMs
+            maxBufferMs = defaults.maxBufferMs
+            playbackBufferMs = defaults.playbackBufferMs
+            rebufferMs = defaults.rebufferMs
+            bufferSizeBytes = defaults.bufferSizeBytes
+            preferencesManager.resetBufferDefaults()
+        }
+    }
+
     // 缓存控制配置 - 针对 TV 端视频流媒体优化
     val loadControl = remember(minBufferMs, maxBufferMs, playbackBufferMs, rebufferMs, bufferSizeBytes) {
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val memoryClass = activityManager.memoryClass
         val largeHeap = context.applicationInfo.flags and ApplicationInfo.FLAG_LARGE_HEAP != 0
 
-        val targetBytes = if (largeHeap || memoryClass >= 512) {
-            bufferSizeBytes.coerceAtLeast(256 * 1024 * 1024)
-        } else if (memoryClass >= 256) {
-            bufferSizeBytes.coerceAtLeast(128 * 1024 * 1024)
-        } else if (memoryClass >= 128) {
-            bufferSizeBytes.coerceAtLeast(64 * 1024 * 1024)
-        } else {
-            bufferSizeBytes.coerceAtLeast(32 * 1024 * 1024)
+        val targetBytes = when {
+            largeHeap || memoryClass >= 512 -> bufferSizeBytes.coerceAtLeast(256 * 1024 * 1024)
+            memoryClass >= 256 -> bufferSizeBytes.coerceAtLeast(128 * 1024 * 1024)
+            memoryClass >= 128 -> bufferSizeBytes.coerceAtLeast(64 * 1024 * 1024)
+            else -> bufferSizeBytes.coerceAtLeast(32 * 1024 * 1024)
         }
 
         DefaultLoadControl.Builder()
@@ -1248,21 +1261,57 @@ fun PlayerScreen(
                     minBufferMs = minBufferMs,
                     onMinBufferMsChange = {
                         minBufferMs = it
+                        if (it < rebufferMs) {
+                            rebufferMs = it
+                            preferencesManager.rebufferMs = it
+                            if (it < playbackBufferMs) {
+                                playbackBufferMs = it
+                                preferencesManager.playbackBufferMs = it
+                            }
+                        }
                         preferencesManager.minBufferMs = it
                     },
                     maxBufferMs = maxBufferMs,
                     onMaxBufferMsChange = {
                         maxBufferMs = it
+                        if (it < minBufferMs) {
+                            minBufferMs = it
+                            preferencesManager.minBufferMs = it
+                        }
                         preferencesManager.maxBufferMs = it
                     },
                     playbackBufferMs = playbackBufferMs,
                     onPlaybackBufferMsChange = {
                         playbackBufferMs = it
+                        if (it > rebufferMs) {
+                            rebufferMs = it
+                            preferencesManager.rebufferMs = it
+                            if (it > minBufferMs) {
+                                minBufferMs = it
+                                preferencesManager.minBufferMs = it
+                                if (it > maxBufferMs) {
+                                    maxBufferMs = it
+                                    preferencesManager.maxBufferMs = it
+                                }
+                            }
+                        }
                         preferencesManager.playbackBufferMs = it
                     },
                     rebufferMs = rebufferMs,
                     onRebufferMsChange = {
                         rebufferMs = it
+                        if (it < playbackBufferMs) {
+                            playbackBufferMs = it
+                            preferencesManager.playbackBufferMs = it
+                        }
+                        if (it > minBufferMs) {
+                            minBufferMs = it
+                            preferencesManager.minBufferMs = it
+                            if (it > maxBufferMs) {
+                                maxBufferMs = it
+                                preferencesManager.maxBufferMs = it
+                            }
+                        }
                         preferencesManager.rebufferMs = it
                     },
                     bufferSizeBytes = bufferSizeBytes,

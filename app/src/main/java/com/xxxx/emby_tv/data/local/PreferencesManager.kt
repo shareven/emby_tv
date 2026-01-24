@@ -68,6 +68,17 @@ class PreferencesManager(context: Context) {
         )
     }
 
+    /**
+     * 重置所有缓冲设置为默认值
+     */
+    fun resetBufferDefaults() {
+        minBufferMs = DEFAULT_MIN_BUFFER_MS
+        maxBufferMs = DEFAULT_MAX_BUFFER_MS
+        playbackBufferMs = DEFAULT_PLAYBACK_BUFFER_MS
+        rebufferMs = DEFAULT_REBUFFER_MS
+        bufferSizeBytes = DEFAULT_BUFFER_SIZE_BYTES
+    }
+
     data class BufferDefaults(
         val minBufferMs: Int,
         val maxBufferMs: Int,

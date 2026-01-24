@@ -49,8 +49,15 @@ fun BufferSettingsTab(
     onResetDefault: () -> Unit,
     onReplay: () -> Unit,
 ) {
-    var currentMinBuffer by remember(minBufferMs) { mutableIntStateOf(minBufferMs) }
-    var currentMaxBuffer by remember(maxBufferMs) { mutableIntStateOf(maxBufferMs) }
+    var currentMinBuffer by remember { mutableIntStateOf(minBufferMs) }
+    var currentMaxBuffer by remember { mutableIntStateOf(maxBufferMs) }
+
+    LaunchedEffect(minBufferMs) {
+        currentMinBuffer = minBufferMs
+    }
+    LaunchedEffect(maxBufferMs) {
+        currentMaxBuffer = maxBufferMs
+    }
 
     fun onMinBufferChange(value: Int) {
         currentMinBuffer = value
@@ -100,7 +107,7 @@ fun BufferSettingsTab(
                 ) {
                     Box {
                         Text(
-                            text = stringResource(R.string.replay),
+                            text = stringResource(R.string.apply_to_playback),
                         )
                     }
                 }
@@ -116,7 +123,7 @@ fun BufferSettingsTab(
                 nameResId = R.string.min_buffer,
                 descResId = R.string.min_buffer_desc,
                 recommendResId = R.string.min_buffer_recommend,
-                options = listOf(15_000, 30_000, 45_000, 60_000, 90_000, 120_000),
+                options = listOf(15_000, 20_000, 30_000, 45_000, 60_000, 90_000, 120_000),
                 currentValue = currentMinBuffer,
                 onValueChange = ::onMinBufferChange,
                 formatResId = R.string.seconds
@@ -215,7 +222,7 @@ fun BufferSettingsTab(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = stringResource(R.string.replay),
+                        text = stringResource(R.string.apply_to_playback),
                     )
                 }
             }

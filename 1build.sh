@@ -8,6 +8,8 @@ APK_NAME="emby_tv-v${VERSION}.apk"
 sed -i '' "s/Newest release: v[0-9.]*/Newest release: v${VERSION}/" README.md
 echo "README.md 版本号已更新: v${VERSION}"
 
+# 清除缓存  --no-build-cache 告诉 Gradle 忽略所有全局缓存，重新计算所有任务。
+./gradlew clean --no-build-cache
 # 构建Release版本
 echo "开始构建Emby TV Release版本..."
 ./gradlew assembleRelease
