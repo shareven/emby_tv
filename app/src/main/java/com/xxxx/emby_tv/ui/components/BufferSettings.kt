@@ -49,33 +49,7 @@ fun BufferSettingsTab(
     onResetDefault: () -> Unit,
     onReplay: () -> Unit,
 ) {
-    var currentMinBuffer by remember { mutableIntStateOf(minBufferMs) }
-    var currentMaxBuffer by remember { mutableIntStateOf(maxBufferMs) }
 
-    LaunchedEffect(minBufferMs) {
-        currentMinBuffer = minBufferMs
-    }
-    LaunchedEffect(maxBufferMs) {
-        currentMaxBuffer = maxBufferMs
-    }
-
-    fun onMinBufferChange(value: Int) {
-        currentMinBuffer = value
-        if (value > currentMaxBuffer) {
-            currentMaxBuffer = value
-            onMaxBufferMsChange(value)
-        }
-        onMinBufferMsChange(value)
-    }
-
-    fun onMaxBufferChange(value: Int) {
-        currentMaxBuffer = value
-        if (value < currentMinBuffer) {
-            currentMinBuffer = value
-            onMinBufferMsChange(value)
-        }
-        onMaxBufferMsChange(value)
-    }
 
     LazyColumn(
         modifier = Modifier
@@ -124,8 +98,8 @@ fun BufferSettingsTab(
                 descResId = R.string.min_buffer_desc,
                 recommendResId = R.string.min_buffer_recommend,
                 options = listOf(15_000, 20_000, 30_000, 45_000, 60_000, 90_000, 120_000),
-                currentValue = currentMinBuffer,
-                onValueChange = ::onMinBufferChange,
+                currentValue = minBufferMs,
+                onValueChange = onMinBufferMsChange,
                 formatResId = R.string.seconds
             )
         }
@@ -140,8 +114,8 @@ fun BufferSettingsTab(
                 descResId = R.string.max_buffer_desc,
                 recommendResId = R.string.max_buffer_recommend,
                 options = listOf(30_000, 60_000, 90_000, 120_000, 180_000, 300_000),
-                currentValue = currentMaxBuffer,
-                onValueChange = ::onMaxBufferChange,
+                currentValue = maxBufferMs,
+                onValueChange = onMaxBufferMsChange,
                 formatResId = R.string.seconds
             )
         }

@@ -58,7 +58,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun EmbyTvApp() {
     val navController = rememberNavController()
-    
+
     // 使用新的 MainViewModel
     val mainViewModel: MainViewModel = viewModel()
 
@@ -102,7 +102,8 @@ fun EmbyTvApp() {
 
     // 获取当前主题色
     val context = LocalContext.current
-    val currentThemeColor = ThemeColorManager.getThemeColorById(context, mainViewModel.currentThemeId)
+    val currentThemeColor =
+        ThemeColorManager.getThemeColorById(context, mainViewModel.currentThemeId)
 
     Emby_tvTheme(themeColor = currentThemeColor) {
         Surface(
@@ -118,7 +119,7 @@ fun EmbyTvApp() {
                     composable("loading") {
                         Loading()
                     }
-                    
+
                     // 登录页面
                     composable("login") {
                         val loginViewModel: LoginViewModel = viewModel()
@@ -140,11 +141,11 @@ fun EmbyTvApp() {
                         LaunchedEffect(backStackEntry) {
                             // 如果不是首次加载（说明是从其他页面返回），则刷新数据
                             if (isInitialLoaded) {
-                                 homeViewModel.loadData()
+                                homeViewModel.loadData()
                             } else {
                                 // 首次加载，不刷新
                                 isInitialLoaded = true
-                             }
+                            }
                         }
 
                         HomeScreen(
@@ -293,7 +294,8 @@ fun EmbyTvApp() {
                         )
                     ) { backStackEntry ->
                         val mediaId = backStackEntry.arguments?.getString("mediaId") ?: ""
-                        val playbackPositionTicks = backStackEntry.arguments?.getLong("position") ?: 0L
+                        val playbackPositionTicks =
+                            backStackEntry.arguments?.getLong("position") ?: 0L
                         val playerViewModel: PlayerViewModel = viewModel()
 
                         PlayerScreen(
@@ -303,6 +305,12 @@ fun EmbyTvApp() {
                             onNavigateToPlayer = { nextItem ->
                                 val nextId = nextItem.id ?: ""
                                 val nextPos = nextItem.userData?.playbackPositionTicks ?: 0L
+                                navController.popBackStack()
+                                navController.navigate("player/$nextId?position=$nextPos")
+                            },
+                            onRePlayer = { nextItem, newPosition ->
+                                val nextId = nextItem.id ?: ""
+                                val nextPos = newPosition * 10000
                                 navController.popBackStack()
                                 navController.navigate("player/$nextId?position=$nextPos")
                             }

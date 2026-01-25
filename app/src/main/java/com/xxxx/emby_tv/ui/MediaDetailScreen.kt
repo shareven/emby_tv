@@ -268,7 +268,7 @@ fun MediaDetailScreen(
                                 modifier = Modifier
                                     .fillMaxHeight()
                                     .fillMaxWidth(fraction = resume?.playbackProgress ?: 0f)
-                                    .background(MaterialTheme.colorScheme.primary)
+                                    .background(MaterialTheme.colorScheme.secondary)
                             )
                         }
                         if (((mediaInfo.userData?.playbackPositionTicks
@@ -283,7 +283,7 @@ fun MediaDetailScreen(
                                 modifier = Modifier
                                     .fillMaxHeight()
                                     .fillMaxWidth(fraction = mediaInfo.playbackProgress)
-                                    .background(MaterialTheme.colorScheme.primary)
+                                    .background(MaterialTheme.colorScheme.secondary)
                             )
                         }
                         if (resume != null) Text(

@@ -278,7 +278,7 @@ fun PlayerOverlay(
                                     1f
                                 )
                             )
-                            .background(TvMaterialTheme.colorScheme.primary)
+                            .background(TvMaterialTheme.colorScheme.secondary)
                     )
                 }
             }

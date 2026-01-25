@@ -101,6 +101,7 @@ fun PlayerScreen(
     playbackPositionTicks: Long = 0L,
     onPlaybackStateChanged: (isPlaying: Boolean) -> Unit = {},
     onNavigateToPlayer: (BaseItemDto) -> Unit = {},
+    onRePlayer: (BaseItemDto, Long) -> Unit = { _, _ -> },
     onExit: () -> Unit = {},  // 添加退出回调
 ) {
     val context = LocalContext.current
@@ -157,12 +158,12 @@ fun PlayerScreen(
     var autoSkipIntro by remember { mutableStateOf(preferencesManager.autoSkipIntro) }
     var hasAutoSkipped by remember { mutableStateOf(false) }
 
-    // 缓冲设置 - 从 PreferencesManager 加载默认值
-    var minBufferMs by remember { mutableIntStateOf(preferencesManager.minBufferMs) }
-    var maxBufferMs by remember { mutableIntStateOf(preferencesManager.maxBufferMs) }
-    var playbackBufferMs by remember { mutableIntStateOf(preferencesManager.playbackBufferMs) }
-    var rebufferMs by remember { mutableIntStateOf(preferencesManager.rebufferMs) }
-    var bufferSizeBytes by remember { mutableIntStateOf(preferencesManager.bufferSizeBytes) }
+    // 缓冲设置 - 从 PreferencesManager 加载保存的值，使用 preferencesManager 作为 key 确保重新加载
+    var minBufferMs by remember(preferencesManager.minBufferMs) { mutableIntStateOf(preferencesManager.minBufferMs) }
+    var maxBufferMs by remember(preferencesManager.maxBufferMs) { mutableIntStateOf(preferencesManager.maxBufferMs) }
+    var playbackBufferMs by remember(preferencesManager.playbackBufferMs) { mutableIntStateOf(preferencesManager.playbackBufferMs) }
+    var rebufferMs by remember(preferencesManager.rebufferMs) { mutableIntStateOf(preferencesManager.rebufferMs) }
+    var bufferSizeBytes by remember(preferencesManager.bufferSizeBytes) { mutableIntStateOf(preferencesManager.bufferSizeBytes) }
 
     // 收集设备支持的杜比视界profile
     val supportedDvProfiles by playerViewModel.supportedDvProfiles.collectAsState()
@@ -265,46 +266,43 @@ fun PlayerScreen(
         setEnableDecoderFallback(true)
     }
 
-    // 检查并修复约束条件
-    LaunchedEffect(minBufferMs, maxBufferMs, playbackBufferMs, rebufferMs) {
-        val isConstraintValid = maxBufferMs >= minBufferMs &&
-                                minBufferMs >= rebufferMs &&
-                                rebufferMs >= playbackBufferMs
-        if (!isConstraintValid) {
-            val defaults = preferencesManager.getBufferDefaults()
-            minBufferMs = defaults.minBufferMs
-            maxBufferMs = defaults.maxBufferMs
-            playbackBufferMs = defaults.playbackBufferMs
-            rebufferMs = defaults.rebufferMs
-            bufferSizeBytes = defaults.bufferSizeBytes
-            preferencesManager.resetBufferDefaults()
-        }
+    // 同步检查并修复约束条件 - 在 loadControl 创建之前执行
+    if (maxBufferMs < minBufferMs || minBufferMs < rebufferMs || rebufferMs < playbackBufferMs) {
+        val defaults = preferencesManager.getBufferDefaults()
+        minBufferMs = defaults.minBufferMs
+        maxBufferMs = defaults.maxBufferMs
+        playbackBufferMs = defaults.playbackBufferMs
+        rebufferMs = defaults.rebufferMs
+        bufferSizeBytes = defaults.bufferSizeBytes
+        preferencesManager.resetBufferDefaults()
     }
 
     // 缓存控制配置 - 针对 TV 端视频流媒体优化
-    val loadControl = remember(minBufferMs, maxBufferMs, playbackBufferMs, rebufferMs, bufferSizeBytes) {
-        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val memoryClass = activityManager.memoryClass
-        val largeHeap = context.applicationInfo.flags and ApplicationInfo.FLAG_LARGE_HEAP != 0
+    val loadControl =
+        remember(minBufferMs, maxBufferMs, playbackBufferMs, rebufferMs, bufferSizeBytes) {
+            val activityManager =
+                context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val memoryClass = activityManager.memoryClass
+            val largeHeap = context.applicationInfo.flags and ApplicationInfo.FLAG_LARGE_HEAP != 0
 
-        val targetBytes = when {
-            largeHeap || memoryClass >= 512 -> bufferSizeBytes.coerceAtLeast(256 * 1024 * 1024)
-            memoryClass >= 256 -> bufferSizeBytes.coerceAtLeast(128 * 1024 * 1024)
-            memoryClass >= 128 -> bufferSizeBytes.coerceAtLeast(64 * 1024 * 1024)
-            else -> bufferSizeBytes.coerceAtLeast(32 * 1024 * 1024)
+            val targetBytes = when {
+                largeHeap || memoryClass >= 512 -> bufferSizeBytes.coerceAtLeast(256 * 1024 * 1024)
+                memoryClass >= 256 -> bufferSizeBytes.coerceAtLeast(128 * 1024 * 1024)
+                memoryClass >= 128 -> bufferSizeBytes.coerceAtLeast(64 * 1024 * 1024)
+                else -> bufferSizeBytes.coerceAtLeast(32 * 1024 * 1024)
+            }
+
+            DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    minBufferMs,
+                    maxBufferMs,
+                    playbackBufferMs,
+                    rebufferMs
+                )
+                .setTargetBufferBytes(targetBytes)
+                .setPrioritizeTimeOverSizeThresholds(true)
+                .build()
         }
-
-        DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                minBufferMs,
-                maxBufferMs,
-                playbackBufferMs,
-                rebufferMs
-            )
-            .setTargetBufferBytes(targetBytes)
-            .setPrioritizeTimeOverSizeThresholds(true)
-            .build()
-    }
 
     val bandwidthMeter = remember {
         DefaultBandwidthMeter.getSingletonInstance(context)
@@ -602,7 +600,7 @@ fun PlayerScreen(
                 .setUri(videoUrl)
                 .setSubtitleConfigurations(subtitleConfigs)
 
-            // 计算起始位置：优先级为播放进度 > 参数传入位置 > 0
+           // 计算起始位置：优先级为播放进度 > 参数传入位置 > 0
             val startPositionMs = if (position > 0) {
                 position
             } else if (playbackPositionTicks > 0) {
@@ -836,7 +834,7 @@ fun PlayerScreen(
     // 播放器监听
     DisposableEffect(player) {
         player.addAnalyticsListener(object : AnalyticsListener {
-               
+
             override fun onVideoDecoderInitialized(
                 eventTime: AnalyticsListener.EventTime,
                 decoderName: String,
@@ -1326,6 +1324,7 @@ fun PlayerScreen(
                         playbackBufferMs = defaults.playbackBufferMs
                         rebufferMs = defaults.rebufferMs
                         bufferSizeBytes = defaults.bufferSizeBytes
+                        preferencesManager.resetBufferDefaults()
                     },
                     isFavorite = isFavorite,
                     onToggleFavorite = {
@@ -1346,7 +1345,9 @@ fun PlayerScreen(
                     },
                     serverUrl = serverUrl,
                     repository = repository,
-                    onNavigateToPlayer = onNavigateToPlayer
+                    position = position,
+                    onNavigateToPlayer = onNavigateToPlayer,
+                    onRePlayer = onRePlayer
                 )
             }
 

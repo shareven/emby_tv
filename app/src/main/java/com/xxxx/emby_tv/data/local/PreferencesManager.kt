@@ -144,7 +144,7 @@ class PreferencesManager(context: Context) {
         private const val DEFAULT_THEME_ID = "purple"
 
         // 缓冲设置默认值
-        const val DEFAULT_MIN_BUFFER_MS = 40_000
+        const val DEFAULT_MIN_BUFFER_MS = 45_000
         const val DEFAULT_MAX_BUFFER_MS = 120_000
         const val DEFAULT_PLAYBACK_BUFFER_MS = 3_000
         const val DEFAULT_REBUFFER_MS = 5_000

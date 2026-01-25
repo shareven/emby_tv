@@ -1,6 +1,7 @@
 package com.xxxx.emby_tv.ui.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -174,6 +175,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         selectedAudioIndex: Int,
         isPaused: Boolean = false
     ) {
+        Log.e("reportProgress position", position.toString())
         viewModelScope.launch(Dispatchers.IO + NonCancellable) {
             try {
                 val body = buildProgressBody(mediaId, media, position, selectedSubtitleIndex, selectedAudioIndex, isPaused)
@@ -194,6 +196,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         selectedSubtitleIndex: Int,
         selectedAudioIndex: Int
     ) {
+        Log.e("reportStopped position", position.toString())
         viewModelScope.launch(Dispatchers.IO + NonCancellable) {
             try {
                 val body = buildStoppedBody(mediaId, media, position, selectedSubtitleIndex, selectedAudioIndex)

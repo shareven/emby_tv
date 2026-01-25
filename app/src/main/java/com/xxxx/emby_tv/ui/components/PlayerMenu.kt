@@ -60,6 +60,8 @@ fun PlayerMenu(
     onToggleFavorite: () -> Unit,
     serverUrl: String,
     repository: EmbyRepository,
+    position:Long,
+    onRePlayer: (BaseItemDto,Long) -> Unit,
     onNavigateToPlayer: (BaseItemDto) -> Unit,
     autoSkipIntro: Boolean = false,
     onAutoSkipIntroChange: (Boolean) -> Unit = {},
@@ -220,7 +222,7 @@ fun PlayerMenu(
                                 onResetDefault = onResetBufferDefaults,
                                 onReplay = {
                                     onDismiss()
-                                    onNavigateToPlayer(mediaInfo)
+                                    onRePlayer(mediaInfo,position)
                                 }
                             )
 
